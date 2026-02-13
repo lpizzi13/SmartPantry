@@ -1,60 +1,57 @@
-package it.sapienza.smartpantry.ui // <-- ATTENTO: Lascia il tuo package qui!
+package it.sapienza.smartpantry.ui
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
-import android.widget.EditText
-import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
-import it.sapienza.smartpantry.R
 
-class LoginActivity : AppCompatActivity() {
+class LoginActivity : ComponentActivity() {
 
     private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_login)
-
         auth = FirebaseAuth.getInstance()
-
-        // 1. Colleghiamo il codice ai componenti grafici
-        val etEmail = findViewById<EditText>(R.id.etEmail)
-        val etPassword = findViewById<EditText>(R.id.etPassword)
-        val btnLogin = findViewById<Button>(R.id.btnLogin)
-        val tvRegister = findViewById<TextView>(R.id.tvRegister)
-
-        // 2. Cosa succede quando clicchi "Accedi"
-        btnLogin.setOnClickListener {
-            val email = etEmail.text.toString().trim()
-            val password = etPassword.text.toString().trim()
-
-            if (email.isEmpty() || password.isEmpty()) {
-                // Errore: campi vuoti
-                Toast.makeText(this, "Inserisci email e password!", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            auth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this) { task ->
-                    if (task.isSuccessful) {
-                        // Login riuscito!
-                        navigateToMain()
-                    } else {
-                        // Errore (es. password sbagliata, utente non trovato)
-                        Toast.makeText(
-                            this,
-                            "Errore: ${task.exception?.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
+        setContent {
+            MaterialTheme {
+                LoginScreen(
+                    onLoginClick = { email, password ->
+                        if (email.isEmpty() || password.isEmpty()) {
+                            Toast.makeText(this, "Inserisci email e password!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            auth.signInWithEmailAndPassword(email, password)
+                                .addOnCompleteListener(this) { task ->
+                                    if (task.isSuccessful) {
+                                        navigateToMain()
+                                    } else {
+                                        Toast.makeText(
+                                            this,
+                                            "Errore: ${task.exception?.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                        }
+                    },
+                    onRegisterClick = {
+                        Toast.makeText(this, "Funzione registrazione da implementare", Toast.LENGTH_SHORT).show()
                     }
-                }
-        }
-
-        // 3. Cosa succede quando clicchi "Registrati"
-        tvRegister.setOnClickListener {
-            Toast.makeText(this, "Funzione registrazione da implementare", Toast.LENGTH_SHORT).show()
+                )
+            }
         }
     }
 
@@ -67,9 +64,66 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun navigateToMain() {
-        // Passiamo alla schermata principale e chiudiamo questa
         val intent = Intent(this, MainActivity::class.java)
         startActivity(intent)
-        finish() // Importante: così se fai "Indietro" l'app si chiude invece di tornare al login
+        finish()
+    }
+}
+
+@Composable
+fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> Unit) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Smart Pantry",
+            fontSize = 32.sp,
+            style = MaterialTheme.typography.headlineLarge
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Email") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = { onLoginClick(email, password) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Accedi")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Non hai un account? Registrati",
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { onRegisterClick() }
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LoginScreenPreview() {
+    MaterialTheme {
+        LoginScreen(onLoginClick = { _, _ -> }, onRegisterClick = {})
     }
 }
