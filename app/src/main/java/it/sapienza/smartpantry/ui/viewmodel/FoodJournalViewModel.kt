@@ -1,6 +1,7 @@
 package it.sapienza.smartpantry.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
+import it.sapienza.smartpantry.ui.model.MealFoodUi
 import it.sapienza.smartpantry.ui.model.MealUi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,6 +12,7 @@ import kotlin.math.roundToInt
 
 data class FoodJournalUiState(
     val meals: List<MealUi>,
+    val mealFoods: Map<String, List<MealFoodUi>> = emptyMap(),
     val selectedDateMillis: Long,
     val selectedWeekNumber: Int,
     val basalMetabolicRate: Int? = null,
@@ -79,6 +81,27 @@ class FoodJournalViewModel : ViewModel() {
                 sportCalories = sportCalories,
                 recommendedCalories = bmr?.plus(300 + sportCalories)
             )
+        }
+    }
+
+    fun onFoodAdded(
+        mealName: String,
+        foodName: String,
+        caloriesPer100g: Double?,
+        grams: Int
+    ) {
+        if (mealName.isBlank() || foodName.isBlank()) return
+
+        _uiState.update { currentState ->
+            val updatedMealFoods = currentState.mealFoods.toMutableMap()
+            val existingFoods = updatedMealFoods[mealName].orEmpty()
+            updatedMealFoods[mealName] = existingFoods + MealFoodUi(
+                name = foodName,
+                caloriesPer100g = caloriesPer100g,
+                grams = grams.coerceAtLeast(1)
+            )
+
+            currentState.copy(mealFoods = updatedMealFoods)
         }
     }
 

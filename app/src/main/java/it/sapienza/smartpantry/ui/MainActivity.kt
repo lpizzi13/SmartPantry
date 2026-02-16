@@ -1,10 +1,14 @@
 package it.sapienza.smartpantry.ui
 
+import android.app.Activity
 import android.app.DatePickerDialog
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -73,6 +77,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import it.sapienza.smartpantry.ui.model.MealFoodUi
 import it.sapienza.smartpantry.ui.model.MealUi
 import it.sapienza.smartpantry.ui.model.ShoppingItem
 import it.sapienza.smartpantry.ui.model.ShoppingSection
@@ -178,6 +183,27 @@ fun FoodJournalScreen(
     val uiState by viewModel.uiState.collectAsState()
     val profileState by profileViewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val addFoodLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data ?: return@rememberLauncherForActivityResult
+            val mealName = data.getStringExtra(FoodSelectionActivity.EXTRA_MEAL_NAME).orEmpty()
+            val foodName = data.getStringExtra(FoodSelectionActivity.EXTRA_SELECTED_FOOD_NAME).orEmpty()
+            val kcal = data.getDoubleExtra(
+                FoodSelectionActivity.EXTRA_SELECTED_FOOD_KCAL_100G,
+                FoodSelectionActivity.INVALID_KCAL
+            ).takeUnless { it == FoodSelectionActivity.INVALID_KCAL }
+            val grams = data.getIntExtra(FoodSelectionActivity.EXTRA_SELECTED_FOOD_GRAMS, 0)
+
+            viewModel.onFoodAdded(
+                mealName = mealName,
+                foodName = foodName,
+                caloriesPer100g = kcal,
+                grams = grams
+            )
+        }
+    }
 
     LaunchedEffect(profileState) {
         viewModel.onProfileUpdated(profileState)
@@ -216,7 +242,16 @@ fun FoodJournalScreen(
             )
         }
         item {
-            MealsSection(meals = uiState.meals)
+            MealsSection(
+                meals = uiState.meals,
+                mealFoods = uiState.mealFoods,
+                onAddFoodClick = { meal ->
+                    val intent = Intent(context, FoodSelectionActivity::class.java).apply {
+                        putExtra(FoodSelectionActivity.EXTRA_MEAL_NAME, meal.name)
+                    }
+                    addFoodLauncher.launch(intent)
+                }
+            )
         }
     }
 }
@@ -304,7 +339,11 @@ private fun SummarySection(
 }
 
 @Composable
-private fun MealsSection(meals: List<MealUi>) {
+private fun MealsSection(
+    meals: List<MealUi>,
+    mealFoods: Map<String, List<MealFoodUi>>,
+    onAddFoodClick: (MealUi) -> Unit
+) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -331,7 +370,17 @@ private fun MealsSection(meals: List<MealUi>) {
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 meals.forEachIndexed { index, meal ->
-                    MealRow(meal = meal)
+                    val foodsForMeal = mealFoods[meal.name].orEmpty()
+                    val subtitle = when {
+                        foodsForMeal.isEmpty() -> "Aggiungi alimenti"
+                        foodsForMeal.size == 1 -> "${foodsForMeal.first().name} (${foodsForMeal.first().grams} g)"
+                        else -> "${foodsForMeal.size} alimenti aggiunti"
+                    }
+                    MealRow(
+                        meal = meal,
+                        subtitle = subtitle,
+                        onAddFoodClick = { onAddFoodClick(meal) }
+                    )
                     if (index != meals.lastIndex) {
                         Divider(color = Color(0xFFE5E5E5))
                     }
@@ -342,7 +391,11 @@ private fun MealsSection(meals: List<MealUi>) {
 }
 
 @Composable
-private fun MealRow(meal: MealUi) {
+private fun MealRow(
+    meal: MealUi,
+    subtitle: String,
+    onAddFoodClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -370,14 +423,14 @@ private fun MealRow(meal: MealUi) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "Aggiungi alimenti",
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF6B6B6B)
             )
         }
 
         FilledIconButton(
-            onClick = { },
+            onClick = onAddFoodClick,
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = Color(0xFF111111),
                 contentColor = Color.White
