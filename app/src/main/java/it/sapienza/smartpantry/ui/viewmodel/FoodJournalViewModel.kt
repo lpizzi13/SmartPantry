@@ -7,11 +7,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 data class FoodJournalUiState(
     val meals: List<MealUi>,
     val selectedDateMillis: Long,
-    val selectedWeekNumber: Int
+    val selectedWeekNumber: Int,
+    val basalMetabolicRate: Int? = null,
+    val sportCalories: Int = 0,
+    val recommendedCalories: Int? = null
 )
 
 class FoodJournalViewModel : ViewModel() {
@@ -48,6 +52,32 @@ class FoodJournalViewModel : ViewModel() {
             currentState.copy(
                 selectedDateMillis = selectedDateMillis,
                 selectedWeekNumber = calculateIsoWeekNumber(selectedDateMillis)
+            )
+        }
+    }
+
+    fun onProfileUpdated(profileState: ProfileUiState) {
+        val age = profileState.age.toIntOrNull()
+        val heightCm = profileState.heightCm.toDoubleOrNull()
+        val weightKg = profileState.weightKg.toDoubleOrNull()
+        val sportCalories = profileState.sportCaloriesTotal
+
+        val bmr = if (profileState.sex.isBlank() || age == null || heightCm == null || weightKg == null) {
+            null
+        } else {
+            val sexConstant = when (profileState.sex) {
+                "Maschio" -> 5.0
+                "Femmina" -> -161.0
+                else -> -78.0
+            }
+            (10.0 * weightKg + 6.25 * heightCm - 5.0 * age + sexConstant).roundToInt()
+        }
+
+        _uiState.update { currentState ->
+            currentState.copy(
+                basalMetabolicRate = bmr,
+                sportCalories = sportCalories,
+                recommendedCalories = bmr?.plus(300 + sportCalories)
             )
         }
     }

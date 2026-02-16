@@ -51,10 +51,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -147,7 +148,10 @@ fun MainScreen(
         NavHost(navController, startDestination = Screen.Home.route, Modifier.padding(innerPadding)) {
             composable(Screen.Home.route) { HomeScreen() }
             composable(Screen.FoodJournal.route) {
-                FoodJournalScreen(viewModel = foodJournalViewModel)
+                FoodJournalScreen(
+                    viewModel = foodJournalViewModel,
+                    profileViewModel = profileViewModel
+                )
             }
             composable(Screen.ShoppingList.route) {
                 ShoppingListScreen(viewModel = shoppingListViewModel)
@@ -167,9 +171,17 @@ fun HomeScreen() {
 }
 
 @Composable
-fun FoodJournalScreen(viewModel: FoodJournalViewModel) {
+fun FoodJournalScreen(
+    viewModel: FoodJournalViewModel,
+    profileViewModel: ProfileViewModel
+) {
     val uiState by viewModel.uiState.collectAsState()
+    val profileState by profileViewModel.uiState.collectAsState()
     val context = LocalContext.current
+
+    LaunchedEffect(profileState) {
+        viewModel.onProfileUpdated(profileState)
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -197,7 +209,11 @@ fun FoodJournalScreen(viewModel: FoodJournalViewModel) {
             )
         }
         item {
-            SummarySection()
+            SummarySection(
+                basalMetabolicRate = uiState.basalMetabolicRate,
+                sportCalories = uiState.sportCalories,
+                recommendedCalories = uiState.recommendedCalories
+            )
         }
         item {
             MealsSection(meals = uiState.meals)
@@ -233,7 +249,11 @@ private fun JournalHeader(
 }
 
 @Composable
-private fun SummarySection() {
+private fun SummarySection(
+    basalMetabolicRate: Int?,
+    sportCalories: Int,
+    recommendedCalories: Int?
+) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -259,11 +279,25 @@ private fun SummarySection() {
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Riepilogo (in arrivo)",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF6B6B6B)
-                )
+                if (recommendedCalories == null) {
+                    Text(
+                        text = "Completa sesso, età, altezza e peso nel profilo per calcolare le calorie giornaliere.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF6B6B6B)
+                    )
+                } else {
+                    val bmrValue = basalMetabolicRate ?: 0
+                    Text(
+                        text = "Calorie consigliate: $recommendedCalories kcal",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "BMR: $bmrValue kcal + 300 kcal + sport: $sportCalories kcal",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF6B6B6B)
+                    )
+                }
             }
         }
     }
@@ -672,6 +706,33 @@ fun ProfileScreen(viewModel: ProfileViewModel) {
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         suffix = { Text("kg") }
+                    )
+
+                    Text(
+                        text = "Calorie bruciate con sport",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.sportCaloriesInput,
+                            onValueChange = viewModel::onSportCaloriesChanged,
+                            label = { Text("kcal") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = viewModel::addSportCalories) {
+                            Text("Aggiungi")
+                        }
+                    }
+                    Text(
+                        text = "Totale sport: ${uiState.sportCaloriesTotal} kcal",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF6B6B6B)
                     )
 
                     Button(

@@ -13,6 +13,8 @@ data class ProfileUiState(
     val age: String = "",
     val heightCm: String = "",
     val weightKg: String = "",
+    val sportCaloriesInput: String = "",
+    val sportCaloriesTotal: Int = 0,
     val showSavedMessage: Boolean = false
 ) {
     val canSave: Boolean
@@ -72,6 +74,30 @@ class ProfileViewModel : ViewModel() {
                 weightKg = sanitizeDecimalInput(value),
                 showSavedMessage = false
             )
+        }
+    }
+
+    fun onSportCaloriesChanged(value: String) {
+        _uiState.update { currentState ->
+            currentState.copy(
+                sportCaloriesInput = value.filter(Char::isDigit),
+                showSavedMessage = false
+            )
+        }
+    }
+
+    fun addSportCalories() {
+        _uiState.update { currentState ->
+            val addedCalories = currentState.sportCaloriesInput.toIntOrNull() ?: 0
+            if (addedCalories <= 0) {
+                currentState
+            } else {
+                currentState.copy(
+                    sportCaloriesTotal = currentState.sportCaloriesTotal + addedCalories,
+                    sportCaloriesInput = "",
+                    showSavedMessage = false
+                )
+            }
         }
     }
 
