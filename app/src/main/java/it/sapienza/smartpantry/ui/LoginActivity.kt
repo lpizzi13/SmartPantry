@@ -5,11 +5,24 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -17,38 +30,22 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.auth.FirebaseAuth
+import it.sapienza.smartpantry.ui.viewmodel.LoginEvent
+import it.sapienza.smartpantry.ui.viewmodel.LoginUiState
+import it.sapienza.smartpantry.ui.viewmodel.LoginViewModel
 
 class LoginActivity : ComponentActivity() {
-
-    private lateinit var auth: FirebaseAuth
+    private val loginViewModel: LoginViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        auth = FirebaseAuth.getInstance()
         setContent {
             MaterialTheme {
                 LoginScreen(
-                    onLoginClick = { email, password ->
-                        if (email.isEmpty() || password.isEmpty()) {
-                            Toast.makeText(this, "Inserisci email e password!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            auth.signInWithEmailAndPassword(email, password)
-                                .addOnCompleteListener(this) { task ->
-                                    if (task.isSuccessful) {
-                                        navigateToMain()
-                                    } else {
-                                        Toast.makeText(
-                                            this,
-                                            "Errore: ${task.exception?.message}",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                }
-                        }
-                    },
-                    onRegisterClick = {
-                        Toast.makeText(this, "Funzione registrazione da implementare", Toast.LENGTH_SHORT).show()
+                    viewModel = loginViewModel,
+                    onNavigateToMain = ::navigateToMain,
+                    onShowMessage = { message ->
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                     }
                 )
             }
@@ -57,8 +54,7 @@ class LoginActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        val currentUser = auth.currentUser
-        if (currentUser != null) {
+        if (loginViewModel.hasLoggedUser()) {
             navigateToMain()
         }
     }
@@ -71,10 +67,39 @@ class LoginActivity : ComponentActivity() {
 }
 
 @Composable
-fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> Unit) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+fun LoginScreen(
+    viewModel: LoginViewModel,
+    onNavigateToMain: () -> Unit,
+    onShowMessage: (String) -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
 
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is LoginEvent.ShowMessage -> onShowMessage(event.message)
+                LoginEvent.NavigateToMain -> onNavigateToMain()
+            }
+        }
+    }
+
+    LoginScreenContent(
+        uiState = uiState,
+        onEmailChanged = viewModel::onEmailChanged,
+        onPasswordChanged = viewModel::onPasswordChanged,
+        onLoginClick = viewModel::login,
+        onRegisterClick = viewModel::register
+    )
+}
+
+@Composable
+private fun LoginScreenContent(
+    uiState: LoginUiState,
+    onEmailChanged: (String) -> Unit,
+    onPasswordChanged: (String) -> Unit,
+    onLoginClick: () -> Unit,
+    onRegisterClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -89,16 +114,16 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
         )
         Spacer(modifier = Modifier.height(32.dp))
         OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
+            value = uiState.email,
+            onValueChange = onEmailChanged,
             label = { Text("Email") },
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
         )
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
+            value = uiState.password,
+            onValueChange = onPasswordChanged,
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
@@ -106,10 +131,11 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
         )
         Spacer(modifier = Modifier.height(32.dp))
         Button(
-            onClick = { onLoginClick(email, password) },
+            onClick = onLoginClick,
+            enabled = !uiState.isLoading,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Accedi")
+            Text(if (uiState.isLoading) "Accesso..." else "Accedi")
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -124,6 +150,12 @@ fun LoginScreen(onLoginClick: (String, String) -> Unit, onRegisterClick: () -> U
 @Composable
 fun LoginScreenPreview() {
     MaterialTheme {
-        LoginScreen(onLoginClick = { _, _ -> }, onRegisterClick = {})
+        LoginScreenContent(
+            uiState = LoginUiState(email = "utente@mail.com", password = "password"),
+            onEmailChanged = {},
+            onPasswordChanged = {},
+            onLoginClick = {},
+            onRegisterClick = {}
+        )
     }
 }
