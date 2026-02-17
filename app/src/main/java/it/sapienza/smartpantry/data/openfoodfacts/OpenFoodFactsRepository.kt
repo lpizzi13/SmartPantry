@@ -2,6 +2,7 @@ package it.sapienza.smartpantry.data.openfoodfacts
 
 import com.google.gson.JsonObject
 import it.sapienza.smartpantry.ui.model.FoodSearchItemUi
+import it.sapienza.smartpantry.ui.model.ProductLookupUi
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -33,6 +34,33 @@ class OpenFoodFactsRepository {
             .distinctBy { "${it.name.lowercase()}|${it.brand?.lowercase().orEmpty()}" }
     }
 
+    suspend fun findProductByCode(code: String): ProductLookupUi? {
+        val normalizedCode = code.trim()
+        if (normalizedCode.isEmpty()) {
+            return null
+        }
+
+        val response = api.getProductByCode(normalizedCode)
+        if (response.status != PRODUCT_FOUND_STATUS) {
+            return null
+        }
+
+        val product = response.product ?: return null
+        val name = firstNotBlank(
+            product.productName,
+            product.productNameIt,
+            product.genericNameIt,
+            product.genericName
+        ) ?: return null
+
+        return ProductLookupUi(
+            code = normalizedCode,
+            name = name,
+            brand = product.brands?.trim()?.takeIf { it.isNotEmpty() },
+            caloriesPer100g = parseCaloriesPer100g(product.nutriments)
+        )
+    }
+
     private fun parseCaloriesPer100g(nutriments: JsonObject?): Double? {
         if (nutriments == null) return null
 
@@ -60,5 +88,12 @@ class OpenFoodFactsRepository {
 
     private companion object {
         const val BASE_URL = "https://world.openfoodfacts.org/"
+        const val PRODUCT_FOUND_STATUS = 1
+    }
+
+    private fun firstNotBlank(vararg candidates: String?): String? {
+        return candidates
+            .firstOrNull { !it.isNullOrBlank() }
+            ?.trim()
     }
 }

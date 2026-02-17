@@ -32,11 +32,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import it.sapienza.smartpantry.ui.model.FoodSearchItemUi
 import it.sapienza.smartpantry.ui.viewmodel.FoodSelectionViewModel
 import kotlin.math.roundToInt
@@ -114,6 +121,19 @@ private fun FoodSelectionScreen(
     onFoodSelected: (FoodSearchItemUi) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val scannerOptions = remember {
+        GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(
+                Barcode.FORMAT_QR_CODE,
+                Barcode.FORMAT_EAN_13,
+                Barcode.FORMAT_EAN_8,
+                Barcode.FORMAT_UPC_A,
+                Barcode.FORMAT_UPC_E
+            )
+            .enableAutoZoom()
+            .build()
+    }
 
     LaunchedEffect(mealName) {
         viewModel.initialize(mealName)
@@ -146,8 +166,43 @@ private fun FoodSelectionScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = viewModel::searchFoods) {
+                Button(
+                    onClick = viewModel::searchFoods,
+                    enabled = !uiState.isLoading
+                ) {
                     Text("Cerca")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = {
+                        val activity = context as? Activity
+                        if (activity == null) {
+                            viewModel.onScannerError("Scanner non disponibile in questa schermata.")
+                        } else {
+                            val scanner = GmsBarcodeScanning.getClient(activity, scannerOptions)
+                            scanner.startScan()
+                                .addOnSuccessListener { barcode ->
+                                    viewModel.searchFoodByCode(barcode.rawValue.orEmpty())
+                                }
+                                .addOnFailureListener { throwable ->
+                                    val isUserCanceled = (throwable as? ApiException)
+                                        ?.statusCode == CommonStatusCodes.CANCELED
+                                    if (!isUserCanceled) {
+                                        viewModel.onScannerError("Scansione non riuscita. Riprova.")
+                                    }
+                                }
+                        }
+                    },
+                    enabled = !uiState.isLoading
+                ) {
+                    Text("Scansiona")
                 }
             }
 

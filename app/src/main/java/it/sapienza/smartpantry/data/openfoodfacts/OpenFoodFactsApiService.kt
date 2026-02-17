@@ -1,6 +1,7 @@
 package it.sapienza.smartpantry.data.openfoodfacts
 
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface OpenFoodFactsApiService {
@@ -12,4 +13,9 @@ interface OpenFoodFactsApiService {
         @Query("json") json: Int = 1,
         @Query("page_size") pageSize: Int = 50
     ): OpenFoodFactsSearchResponse
+
+    @GET("api/v2/product/{code}.json")
+    suspend fun getProductByCode(
+        @Path("code") code: String
+    ): OpenFoodFactsProductResponse
 }

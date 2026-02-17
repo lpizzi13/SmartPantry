@@ -14,6 +14,13 @@ data class FoodSearchItemUi(
     val caloriesPer100g: Double?
 )
 
+data class ProductLookupUi(
+    val code: String,
+    val name: String,
+    val brand: String?,
+    val caloriesPer100g: Double? = null
+)
+
 data class ShoppingItem(val name: String, val grams: String, val isChecked: Boolean)
 
 data class ShoppingSection(val id: Int, val name: String, val items: List<ShoppingItem>)

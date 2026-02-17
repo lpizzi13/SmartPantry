@@ -1,8 +1,11 @@
 package it.sapienza.smartpantry.ui
 
+import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -71,12 +75,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import it.sapienza.smartpantry.reminder.ShoppingProximityReminderManager
 import it.sapienza.smartpantry.ui.model.MealFoodUi
 import it.sapienza.smartpantry.ui.model.MealUi
 import it.sapienza.smartpantry.ui.model.ShoppingItem
@@ -444,12 +455,248 @@ private fun MealRow(
 @Composable
 fun ShoppingListScreen(viewModel: ShoppingListViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val scannerOptions = remember {
+        GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(
+                Barcode.FORMAT_QR_CODE,
+                Barcode.FORMAT_EAN_13,
+                Barcode.FORMAT_EAN_8,
+                Barcode.FORMAT_UPC_A,
+                Barcode.FORMAT_UPC_E
+            )
+            .enableAutoZoom()
+            .build()
+    }
+    var remindersEnabled by remember {
+        mutableStateOf(ShoppingProximityReminderManager.isEnabled(context))
+    }
+    var reminderFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    val pendingShoppingItemsCount = uiState.sections.sumOf { section ->
+        section.items.count { item -> !item.isChecked }
+    }
+    val activateReminders = {
+        ShoppingProximityReminderManager.setEnabled(context, true)
+        ShoppingProximityReminderManager.syncShoppingItems(context, uiState.sections)
+        remindersEnabled = true
+        reminderFeedbackMessage = if (pendingShoppingItemsCount == 0) {
+            "Promemoria attivati. Aggiungi articoli alla lista per ricevere notifiche."
+        } else {
+            "Promemoria supermercato attivati."
+        }
+    }
+    val backgroundLocationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            activateReminders()
+        } else {
+            reminderFeedbackMessage = "Permesso posizione in background negato."
+        }
+    }
+    val foregroundLocationPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val hasForegroundLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        if (!hasForegroundLocationPermission) {
+            reminderFeedbackMessage = "Permesso posizione negato."
+            return@rememberLauncherForActivityResult
+        }
+
+        val needsBackgroundLocationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+
+        if (needsBackgroundLocationPermission) {
+            backgroundLocationPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        } else {
+            activateReminders()
+        }
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            foregroundLocationPermissionsLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            reminderFeedbackMessage = "Permesso notifiche negato."
+        }
+    }
+
+    LaunchedEffect(uiState.sections) {
+        ShoppingProximityReminderManager.syncShoppingItems(context, uiState.sections)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "Aggiungi da codice prodotto",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = uiState.productCodeInput,
+                        onValueChange = viewModel::onProductCodeChanged,
+                        label = { Text("Codice (EAN/UPC/QR)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = viewModel::lookupProductByCode,
+                        enabled = !uiState.isProductLookupLoading && uiState.productCodeInput.isNotBlank()
+                    ) {
+                        Text(if (uiState.isProductLookupLoading) "Ricerca..." else "Cerca")
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = {
+                            val activity = context as? Activity
+                            if (activity == null) {
+                                viewModel.onProductLookupError("Scanner non disponibile in questa schermata.")
+                            } else {
+                                val scanner = GmsBarcodeScanning.getClient(activity, scannerOptions)
+                                scanner.startScan()
+                                    .addOnSuccessListener { barcode ->
+                                        viewModel.onProductCodeScanned(barcode.rawValue.orEmpty())
+                                    }
+                                    .addOnFailureListener { throwable ->
+                                        val isUserCanceled = (throwable as? ApiException)
+                                            ?.statusCode == CommonStatusCodes.CANCELED
+                                        if (!isUserCanceled) {
+                                            viewModel.onProductLookupError("Scansione non riuscita. Riprova.")
+                                        }
+                                    }
+                            }
+                        },
+                        enabled = !uiState.isProductLookupLoading
+                    ) {
+                        Text("Scansiona")
+                    }
+                }
+
+                val lookupError = uiState.productLookupErrorMessage
+                if (!lookupError.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = lookupError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "Promemoria supermercato",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Raggio: 300 m. Notifica inviata solo se hai articoli non spuntati.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF6B6B6B)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Articoli da comprare: $pendingShoppingItemsCount",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = {
+                            reminderFeedbackMessage = null
+                            if (remindersEnabled) {
+                                ShoppingProximityReminderManager.setEnabled(context, false)
+                                remindersEnabled = false
+                                reminderFeedbackMessage = "Promemoria supermercato disattivati."
+                            } else {
+                                val notificationPermissionRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                if (notificationPermissionRequired) {
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    foregroundLocationPermissionsLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    ) {
+                        Text(if (remindersEnabled) "Disattiva" else "Attiva")
+                    }
+                }
+                if (!reminderFeedbackMessage.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = reminderFeedbackMessage.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (remindersEnabled) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -494,6 +741,81 @@ fun ShoppingListScreen(viewModel: ShoppingListViewModel) {
                 )
             }
         }
+    }
+
+    val pendingProduct = uiState.pendingProduct
+    if (pendingProduct != null) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPendingProduct,
+            title = { Text("Conferma articolo") },
+            text = {
+                Column {
+                    Text(
+                        text = "Codice: ${pendingProduct.code}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF6B6B6B)
+                    )
+                    if (!pendingProduct.brand.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Marca: ${pendingProduct.brand}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF6B6B6B)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = pendingProduct.name,
+                        onValueChange = viewModel::onPendingProductNameChanged,
+                        label = { Text("Nome articolo") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = pendingProduct.grams,
+                        onValueChange = viewModel::onPendingProductGramsChanged,
+                        label = { Text("Grammi (opzionale)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Sezione",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    uiState.sections.forEach { section ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.onPendingProductSectionChanged(section.id) },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = pendingProduct.sectionId == section.id,
+                                onClick = { viewModel.onPendingProductSectionChanged(section.id) }
+                            )
+                            Text(text = section.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = viewModel::confirmPendingProduct,
+                    enabled = pendingProduct.name.isNotBlank()
+                ) {
+                    Text("Aggiungi")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissPendingProduct) {
+                    Text("Annulla")
+                }
+            }
+        )
     }
 
     val editingItem = uiState.editingItem

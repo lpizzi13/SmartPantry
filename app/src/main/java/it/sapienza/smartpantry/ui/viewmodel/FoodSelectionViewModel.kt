@@ -40,7 +40,7 @@ class FoodSelectionViewModel : ViewModel() {
 
     fun onQueryChanged(value: String) {
         _uiState.update { currentState ->
-            currentState.copy(query = value)
+            currentState.copy(query = value, errorMessage = null)
         }
     }
 
@@ -70,6 +70,66 @@ class FoodSelectionViewModel : ViewModel() {
                     )
                 }
             }
+        }
+    }
+
+    fun searchFoodByCode(code: String) {
+        val normalizedCode = code.trim()
+        if (normalizedCode.isEmpty()) {
+            _uiState.update { currentState ->
+                currentState.copy(errorMessage = "Codice scansionato non valido.")
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { currentState ->
+                currentState.copy(
+                    query = normalizedCode,
+                    isLoading = true,
+                    errorMessage = null
+                )
+            }
+
+            runCatching {
+                repository.findProductByCode(normalizedCode)
+            }.onSuccess { product ->
+                _uiState.update { currentState ->
+                    if (product == null) {
+                        currentState.copy(
+                            foods = emptyList(),
+                            isLoading = false,
+                            errorMessage = "Nessun alimento trovato per il codice inserito."
+                        )
+                    } else {
+                        currentState.copy(
+                            foods = listOf(
+                                FoodSearchItemUi(
+                                    name = product.name,
+                                    brand = product.brand,
+                                    caloriesPer100g = product.caloriesPer100g
+                                )
+                            ),
+                            isLoading = false,
+                            errorMessage = null
+                        )
+                    }
+                }
+            }.onFailure {
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        foods = emptyList(),
+                        isLoading = false,
+                        errorMessage = "Errore nel recupero alimento. Riprova."
+                    )
+                }
+            }
+        }
+    }
+
+    fun onScannerError(message: String) {
+        _uiState.update { currentState ->
+            currentState.copy(errorMessage = message)
         }
     }
 }
