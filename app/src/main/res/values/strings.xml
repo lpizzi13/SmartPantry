@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">SmartPantry</string>
+    <string name="title_home">Home</string>
+    <string name="title_diet">Diet</string>
+    <string name="title_shop_list">Shop List</string>
+    <string name="title_stats">Stats</string>
+    <string name="title_profile">Profile</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="title_pantry">Pantry</string>
+    <string name="text_home_screen">Home Screen</string>
+    <string name="text_diet_screen">Diet Screen</string>
+    <string name="text_shop_list_screen">Shop List Screen</string>
+    <string name="text_stats_screen">Stats Screen</string>
+    <string name="text_profile_screen">Profile Screen</string>
+    <string name="text_pantry_screen">Pantry Screen</string>
 </resources>
