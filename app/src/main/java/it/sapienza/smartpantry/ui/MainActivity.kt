@@ -3,7 +3,6 @@ package it.sapienza.smartpantry.ui
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,6 +20,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -29,14 +30,52 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
-import it.sapienza.smartpantry.model.User
-import it.sapienza.smartpantry.model.Biometrics
-import it.sapienza.smartpantry.model.Goals
+import it.sapienza.smartpantry.data.repository.UserRepository
 import it.sapienza.smartpantry.model.UpdateUserResponse
-import it.sapienza.smartpantry.service.RetrofitClient
+import it.sapienza.smartpantry.model.User
+import it.sapienza.smartpantry.ui.screens.PantryScreen
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+
+class ProfileViewModel(
+    private val userRepository: UserRepository = UserRepository()
+) : ViewModel() {
+
+    private val _user = MutableStateFlow(User())
+    val user = _user.asStateFlow()
+
+    fun setUser(user: User) {
+        _user.value = user
+    }
+
+    fun updateUser(updatedUser: User) {
+        userRepository.updateUser(updatedUser, object : Callback<UpdateUserResponse> {
+            override fun onResponse(call: Call<UpdateUserResponse>, response: Response<UpdateUserResponse>) {
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    body?.let {
+                        val finalUser = updatedUser.copy(
+                            goals = updatedUser.goals.copy(
+                                dailyKcal = it.dailyKcal,
+                                macrosTarget = it.macros
+                            )
+                        )
+                        _user.value = finalUser
+                    }
+                } else {
+                    Log.e("UPDATE_ERROR", "Code: ${response.code()}")
+                }
+            }
+
+            override fun onFailure(call: Call<UpdateUserResponse>, t: Throwable) {
+                Log.e("UPDATE_ERROR", "Failure: ${t.message}")
+            }
+        })
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,7 +118,12 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     
-    var user by remember { mutableStateOf(initialUser) }
+    val profileViewModel: ProfileViewModel = viewModel()
+    val user by profileViewModel.user.collectAsState()
+    
+    LaunchedEffect(initialUser) {
+        profileViewModel.setUser(initialUser)
+    }
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     
@@ -170,17 +214,16 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Home.route) { PlaceholderScreen(stringResource(id = R.string.text_home_screen)) }
-            composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
+            composable(Screen.Pantry.route) {
+                PantryScreen(
+                    uid = user.uid.ifBlank { FirebaseAuth.getInstance().currentUser?.uid.orEmpty() }
+                )
+            }
             composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
             composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }
             composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
             composable(Screen.Profile.route) { 
-                ProfileScreen(
-                    user = user,
-                    onUserUpdate = { updatedUser -> 
-                        user = updatedUser 
-                    }
-                ) 
+                ProfileScreen(viewModel = profileViewModel) 
             }
             composable(Screen.Notifications.route) { PlaceholderScreen(stringResource(id = R.string.title_notifications)) }
         }
@@ -188,15 +231,16 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
 }
 
 @Composable
-fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
+fun ProfileScreen(viewModel: ProfileViewModel) {
+    val user by viewModel.user.collectAsState()
     var isEditing by remember { mutableStateOf(false) }
     
-    var name by remember { mutableStateOf(user.name) }
-    var age by remember { mutableStateOf(user.biometrics.age.toString()) }
-    var height by remember { mutableStateOf(user.biometrics.height.toString()) }
-    var weight by remember { mutableStateOf(user.biometrics.weight.toString()) }
-    var gender by remember { mutableStateOf(user.biometrics.gender) }
-    var activityLevel by remember { mutableStateOf(user.biometrics.activityLevel) }
+    var name by remember(user) { mutableStateOf(user.name) }
+    var age by remember(user) { mutableStateOf(user.biometrics.age.toString()) }
+    var height by remember(user) { mutableStateOf(user.biometrics.height.toString()) }
+    var weight by remember(user) { mutableStateOf(user.biometrics.weight.toString()) }
+    var gender by remember(user) { mutableStateOf(user.biometrics.gender) }
+    var activityLevel by remember(user) { mutableStateOf(user.biometrics.activityLevel) }
 
     Column(
         modifier = Modifier
@@ -263,30 +307,7 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
                             activityLevel = activityLevel
                         )
                     )
-                    
-                    // Chiamata al backend per salvare i cambiamenti
-                    RetrofitClient.instance.updateUser(updatedUser).enqueue(object : Callback<UpdateUserResponse> {
-                        override fun onResponse(call: Call<UpdateUserResponse>, response: Response<UpdateUserResponse>) {
-                            if (response.isSuccessful) {
-                                val body = response.body()
-                                body?.let {
-                                    val finalUser = updatedUser.copy(
-                                        goals = updatedUser.goals.copy(
-                                            dailyKcal = it.dailyKcal,
-                                            macrosTarget = it.macros
-                                        )
-                                    )
-                                    onUserUpdate(finalUser)
-                                }
-                            } else {
-                                Log.e("UPDATE_ERROR", "Code: ${response.code()}")
-                            }
-                        }
-
-                        override fun onFailure(call: Call<UpdateUserResponse>, t: Throwable) {
-                            Log.e("UPDATE_ERROR", "Failure: ${t.message}")
-                        }
-                    })
+                    viewModel.updateUser(updatedUser)
                 }
                 isEditing = !isEditing
             },
