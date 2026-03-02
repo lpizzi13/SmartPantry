@@ -15,6 +15,8 @@ data class User(
     @SerializedName("uid") val uid: String = "",
     @SerializedName("email") val email: String = "",
     @SerializedName("name") val name: String = "",
+    @SerializedName("profile_image_url") val profileImageUrl: String = "",
+    @SerializedName("manualOverride") val manualOverride: Boolean = false,
     @SerializedName("biometrics") val biometrics: Biometrics = Biometrics(),
     @SerializedName("goals") val goals: Goals = Goals()
 ) : Parcelable
