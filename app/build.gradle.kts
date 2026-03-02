@@ -85,6 +85,7 @@ dependencies {
     // Concurrency (Coroutines)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     // Navigazione & Immagini
     implementation(libs.androidx.navigation.fragment)

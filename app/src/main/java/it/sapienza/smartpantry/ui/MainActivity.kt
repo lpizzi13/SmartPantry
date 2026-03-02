@@ -3,7 +3,6 @@ package it.sapienza.smartpantry.ui
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,10 +29,9 @@ import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
-import it.sapienza.smartpantry.model.Biometrics
-import it.sapienza.smartpantry.model.Goals
 import it.sapienza.smartpantry.model.UpdateUserResponse
 import it.sapienza.smartpantry.service.RetrofitClient
+import it.sapienza.smartpantry.ui.screens.DietScreen
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -172,7 +170,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
             composable(Screen.Home.route) { PlaceholderScreen(stringResource(id = R.string.text_home_screen)) }
             composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
             composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
-            composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }
+            composable(Screen.Diet.route) { DietScreen() }
             composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
             composable(Screen.Profile.route) { 
                 ProfileScreen(
