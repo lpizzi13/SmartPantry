@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,11 +30,17 @@ import it.sapienza.smartpantry.model.DietViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DietScreen(dietViewModel: DietViewModel = viewModel()) {
+fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
     val uiState by dietViewModel.uiState.collectAsState()
     var menuExpanded by remember { mutableStateOf(false) }
     var renameDialogOpen by remember { mutableStateOf<Diet?>(null) }
     var renameDraft by remember { mutableStateOf("") }
+
+    LaunchedEffect(uid) {
+        if (uid.isNotBlank()) {
+            dietViewModel.initialize(uid)
+        }
+    }
 
     Column(
         modifier = Modifier

@@ -170,7 +170,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
             composable(Screen.Home.route) { PlaceholderScreen(stringResource(id = R.string.text_home_screen)) }
             composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
             composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
-            composable(Screen.Diet.route) { DietScreen() }
+            composable(Screen.Diet.route) { DietScreen(uid = user.uid) }
             composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
             composable(Screen.Profile.route) { 
                 ProfileScreen(
