@@ -23,21 +23,42 @@ interface ApiService {
     fun getProductByBarcode(@Path("code") barcode: String): Call<OpenFoodFactsProductResponse>
 
     @POST("pantry/add")
-    fun addToPantry(@Body request: PantryRequest): Call<Unit>
+    fun addToPantry(@Body request: PantryAddRequest): Call<Unit>
 
-    @PATCH("pantry/decrement")
-    fun decrementItem(@Body request: PantryRequest): Call<Unit>
+    @PATCH("pantry/quantity")
+    fun updateItemQuantity(@Body request: PantryQuantityRequest): Call<Unit>
 
-    @HTTP(method = "DELETE", path = "pantry/item", hasBody = true)
-    fun deleteItem(@Body request: PantryRequest): Call<Unit>
+    @PATCH("pantry/item")
+    fun updatePantryItem(@Body request: PantryItemUpdateRequest): Call<Unit>
 
     @GET("pantry/{uid}")
     fun getPantry(@Path("uid") uid: String): Call<PantryResponse>
 }
 
-data class PantryRequest(
+data class PantryAddRequest(
+    val uid: String,
+    val openFoodFactsId: String? = null,
+    val productName: String,
+    val quantity: Int,
+    val kcal: Double,
+    val prot: Double,
+    val fat: Double,
+    val carbs: Double
+)
+
+data class PantryQuantityRequest(
+    val uid: String,
+    val openFoodFactsId: String,
+    val quantity: Int
+)
+
+data class PantryItemUpdateRequest(
     val uid: String,
     val openFoodFactsId: String,
     val productName: String? = null,
-    val quantityDelta: Int? = null
+    val quantity: Int? = null,
+    val kcal: Double? = null,
+    val prot: Double? = null,
+    val fat: Double? = null,
+    val carbs: Double? = null
 )

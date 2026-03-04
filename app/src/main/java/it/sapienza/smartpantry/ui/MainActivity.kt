@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +35,7 @@ import it.sapienza.smartpantry.data.repository.UserRepository
 import it.sapienza.smartpantry.model.UpdateUserResponse
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.ui.screens.PantryScreen
+import it.sapienza.smartpantry.ui.screens.SearchFoodActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import retrofit2.Call
@@ -117,6 +119,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val context = LocalContext.current
     
     val profileViewModel: ProfileViewModel = viewModel()
     val user by profileViewModel.user.collectAsState()
@@ -124,6 +127,8 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     LaunchedEffect(initialUser) {
         profileViewModel.setUser(initialUser)
     }
+
+    val resolvedUid = user.uid.ifBlank { FirebaseAuth.getInstance().currentUser?.uid.orEmpty() }
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     
@@ -216,7 +221,14 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
             composable(Screen.Home.route) { PlaceholderScreen(stringResource(id = R.string.text_home_screen)) }
             composable(Screen.Pantry.route) {
                 PantryScreen(
-                    uid = user.uid.ifBlank { FirebaseAuth.getInstance().currentUser?.uid.orEmpty() }
+                    uid = resolvedUid,
+                    onOpenSearchFood = {
+                        if (resolvedUid.isNotBlank()) {
+                            val intent = Intent(context, SearchFoodActivity::class.java)
+                            intent.putExtra(SearchFoodActivity.EXTRA_UID, resolvedUid)
+                            context.startActivity(intent)
+                        }
+                    }
                 )
             }
             composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }

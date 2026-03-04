@@ -8,20 +8,31 @@ data class PantryResponse(
 )
 
 data class PantryItem(
-    val openFoodFactsId: String = "",
-    val productName: String = "",
-    val quantity: Long = 0L
+    @SerializedName("openFoodFactsId") val openFoodFactsId: String = "",
+    @SerializedName("productName") val productName: String = "",
+    @SerializedName("quantity") val quantity: Long = 0L,
+    @SerializedName("kcal") val kcal: Double? = null,
+    @SerializedName(value = "prot", alternate = ["protein"]) val prot: Double? = null,
+    @SerializedName("fat") val fat: Double? = null,
+    @SerializedName("carbs") val carbs: Double? = null,
+    @SerializedName("nutrients") val nutrients: PantryNutrients? = null
 )
 
-data class PantryUiState(
-    val searchQuery: String = "",
-    val quantityInput: String = "1",
-    val manualName: String = "",
-    val showManualAdd: Boolean = false,
-    val noApiResults: Boolean = false,
-    val searchResults: List<OpenFoodFactsProduct> = emptyList(),
-    val pantryItems: List<PantryItem> = emptyList(),
-    val isSearching: Boolean = false,
-    val isSaving: Boolean = false,
-    val isScanning: Boolean = false
+data class PantryNutrients(
+    @SerializedName("kcal") val kcal: Double? = null,
+    @SerializedName(value = "prot", alternate = ["protein"]) val prot: Double? = null,
+    @SerializedName("fat") val fat: Double? = null,
+    @SerializedName("carbs") val carbs: Double? = null
 )
+
+fun PantryItem.resolvedKcal(): Double? = firstNonNegative(kcal, nutrients?.kcal)
+fun PantryItem.resolvedProt(): Double? = firstNonNegative(prot, nutrients?.prot)
+fun PantryItem.resolvedFat(): Double? = firstNonNegative(fat, nutrients?.fat)
+fun PantryItem.resolvedCarbs(): Double? = firstNonNegative(carbs, nutrients?.carbs)
+
+private fun firstNonNegative(vararg values: Double?): Double? {
+    for (value in values) {
+        if (value != null && value.isFinite() && value >= 0.0) return value
+    }
+    return null
+}

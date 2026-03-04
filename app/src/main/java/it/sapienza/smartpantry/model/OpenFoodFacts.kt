@@ -16,5 +16,41 @@ data class OpenFoodFactsProductResponse(
 data class OpenFoodFactsProduct(
     @SerializedName(value = "code", alternate = ["openFoodFactsId"]) val code: String? = null,
     @SerializedName(value = "product_name", alternate = ["productName"]) val productName: String? = null,
-    @SerializedName("brands") val brands: String? = null
+    @SerializedName("brands") val brands: String? = null,
+    @SerializedName(
+        value = "kcal",
+        alternate = ["energy-kcal_100g", "energy_kcal_100g", "energyKcal"]
+    ) val kcal: Double? = null,
+    @SerializedName(value = "prot", alternate = ["proteins_100g", "proteins"]) val prot: Double? = null,
+    @SerializedName(value = "fat", alternate = ["fat_100g"]) val fat: Double? = null,
+    @SerializedName(
+        value = "carbs",
+        alternate = ["carbohydrates_100g", "carbohydrates"]
+    ) val carbs: Double? = null,
+    @SerializedName("nutriments") val nutriments: OpenFoodFactsNutriments? = null
 )
+
+data class OpenFoodFactsNutriments(
+    @SerializedName(
+        value = "kcal",
+        alternate = ["energy-kcal_100g", "energy_kcal_100g", "energyKcal"]
+    ) val kcal: Double? = null,
+    @SerializedName(value = "prot", alternate = ["proteins_100g", "proteins"]) val prot: Double? = null,
+    @SerializedName(value = "fat", alternate = ["fat_100g"]) val fat: Double? = null,
+    @SerializedName(
+        value = "carbs",
+        alternate = ["carbohydrates_100g", "carbohydrates"]
+    ) val carbs: Double? = null
+)
+
+fun OpenFoodFactsProduct.resolvedKcal(): Double? = firstNonNegative(kcal, nutriments?.kcal)
+fun OpenFoodFactsProduct.resolvedProt(): Double? = firstNonNegative(prot, nutriments?.prot)
+fun OpenFoodFactsProduct.resolvedFat(): Double? = firstNonNegative(fat, nutriments?.fat)
+fun OpenFoodFactsProduct.resolvedCarbs(): Double? = firstNonNegative(carbs, nutriments?.carbs)
+
+private fun firstNonNegative(vararg values: Double?): Double? {
+    for (value in values) {
+        if (value != null && value.isFinite() && value >= 0.0) return value
+    }
+    return null
+}
