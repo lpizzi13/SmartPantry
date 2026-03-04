@@ -6,6 +6,7 @@ import it.sapienza.smartpantry.model.PantryItem
 import it.sapienza.smartpantry.model.resolvedCarbs
 import it.sapienza.smartpantry.model.resolvedFat
 import it.sapienza.smartpantry.model.resolvedKcal
+import it.sapienza.smartpantry.model.resolvedPackageWeightGrams
 import it.sapienza.smartpantry.model.resolvedProt
 import it.sapienza.smartpantry.service.PantryAddRequest
 import it.sapienza.smartpantry.service.PantryItemUpdateRequest
@@ -26,6 +27,7 @@ class PantryRepository {
         val prot: Double? = null,
         val fat: Double? = null,
         val carbs: Double? = null,
+        val packageWeightGrams: Double? = null,
         val errorMessage: String? = null
     ) {
         val isSuccess: Boolean
@@ -113,7 +115,8 @@ class PantryRepository {
         kcal: Double,
         prot: Double,
         fat: Double,
-        carbs: Double
+        carbs: Double,
+        packageWeightGrams: Double?
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val quantityValue = quantity.toIntOrNullChecked()
             ?: return@withContext Result.failure(
@@ -130,7 +133,8 @@ class PantryRepository {
                     kcal = sanitizeMacro(kcal),
                     prot = sanitizeMacro(prot),
                     fat = sanitizeMacro(fat),
-                    carbs = sanitizeMacro(carbs)
+                    carbs = sanitizeMacro(carbs),
+                    packageWeightGrams = packageWeightGrams?.let(::sanitizeMacro)
                 )
             ).execute()
 
@@ -184,7 +188,8 @@ class PantryRepository {
         kcal: Double? = null,
         prot: Double? = null,
         fat: Double? = null,
-        carbs: Double? = null
+        carbs: Double? = null,
+        packageWeightGrams: Double? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val quantityValue = when (quantity) {
             null -> null
@@ -206,7 +211,8 @@ class PantryRepository {
                     kcal = kcal?.let(::sanitizeMacro),
                     prot = prot?.let(::sanitizeMacro),
                     fat = fat?.let(::sanitizeMacro),
-                    carbs = carbs?.let(::sanitizeMacro)
+                    carbs = carbs?.let(::sanitizeMacro),
+                    packageWeightGrams = packageWeightGrams?.let(::sanitizeMacro)
                 )
             ).execute()
 
@@ -233,6 +239,7 @@ class PantryRepository {
         val resolvedProt = product?.resolvedProt()
         val resolvedFat = product?.resolvedFat()
         val resolvedCarbs = product?.resolvedCarbs()
+        val resolvedPackageWeightGrams = product?.resolvedPackageWeightGrams()
 
         return if (body?.status == 1 && resolvedId.isNotBlank()) {
             BarcodeResolution(
@@ -241,7 +248,8 @@ class PantryRepository {
                 kcal = resolvedKcal,
                 prot = resolvedProt,
                 fat = resolvedFat,
-                carbs = resolvedCarbs
+                carbs = resolvedCarbs,
+                packageWeightGrams = resolvedPackageWeightGrams
             )
         } else {
             BarcodeResolution(errorMessage = "Product not found on OpenFoodFacts.")

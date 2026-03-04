@@ -27,6 +27,10 @@ data class OpenFoodFactsProduct(
         value = "carbs",
         alternate = ["carbohydrates_100g", "carbohydrates"]
     ) val carbs: Double? = null,
+    @SerializedName(
+        value = "packageWeightGrams",
+        alternate = ["package_weight_grams", "product_quantity"]
+    ) val packageWeightGrams: Double? = null,
     @SerializedName("nutriments") val nutriments: OpenFoodFactsNutriments? = null
 )
 
@@ -47,6 +51,7 @@ fun OpenFoodFactsProduct.resolvedKcal(): Double? = firstNonNegative(kcal, nutrim
 fun OpenFoodFactsProduct.resolvedProt(): Double? = firstNonNegative(prot, nutriments?.prot)
 fun OpenFoodFactsProduct.resolvedFat(): Double? = firstNonNegative(fat, nutriments?.fat)
 fun OpenFoodFactsProduct.resolvedCarbs(): Double? = firstNonNegative(carbs, nutriments?.carbs)
+fun OpenFoodFactsProduct.resolvedPackageWeightGrams(): Double? = firstNonNegative(packageWeightGrams)
 
 private fun firstNonNegative(vararg values: Double?): Double? {
     for (value in values) {

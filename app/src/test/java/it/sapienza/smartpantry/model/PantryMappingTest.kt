@@ -11,7 +11,7 @@ class PantryMappingTest {
     @Test
     fun parses_nested_nutrients_from_pantry_payload() {
         val raw = """
-            {"status":"ok","items":[{"openFoodFactsId":"123","productName":"Test Food","quantity":2,"nutrients":{"kcal":350,"carbs":70.2,"protein":12.5,"fat":1.8}}]}
+            {"status":"ok","items":[{"openFoodFactsId":"123","productName":"Test Food","quantity":2,"packageWeightGrams":500,"nutrients":{"kcal":350,"carbs":70.2,"protein":12.5,"fat":1.8}}]}
         """.trimIndent()
 
         val parsed = gson.fromJson(raw, PantryResponse::class.java)
@@ -21,6 +21,7 @@ class PantryMappingTest {
         assertEquals(70.2, item.resolvedCarbs() ?: -1.0, 0.0001)
         assertEquals(12.5, item.resolvedProt() ?: -1.0, 0.0001)
         assertEquals(1.8, item.resolvedFat() ?: -1.0, 0.0001)
+        assertEquals(500.0, item.resolvedPackageWeightGrams() ?: -1.0, 0.0001)
     }
 
     @Test
@@ -51,5 +52,6 @@ class PantryMappingTest {
         assertNull(item.resolvedCarbs())
         assertNull(item.resolvedProt())
         assertNull(item.resolvedFat())
+        assertNull(item.resolvedPackageWeightGrams())
     }
 }

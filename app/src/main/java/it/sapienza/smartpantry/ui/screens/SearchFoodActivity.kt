@@ -216,6 +216,7 @@ private fun SearchFoodActivityContent(
             onCarbsChange = pantryViewModel::onEditorCarbsChange,
             onProtChange = pantryViewModel::onEditorProtChange,
             onFatChange = pantryViewModel::onEditorFatChange,
+            onPackageWeightGramsChange = pantryViewModel::onEditorPackageWeightGramsChange,
             onSave = pantryViewModel::saveEditor
         )
     }
@@ -337,6 +338,7 @@ private fun FoodEditorDialog(
     onCarbsChange: (String) -> Unit,
     onProtChange: (String) -> Unit,
     onFatChange: (String) -> Unit,
+    onPackageWeightGramsChange: (String) -> Unit,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -390,6 +392,14 @@ private fun FoodEditorDialog(
                     value = state.editorFatInput,
                     onValueChange = onFatChange,
                     label = { Text("Fat") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = state.editorPackageWeightGramsInput,
+                    onValueChange = onPackageWeightGramsChange,
+                    label = { Text("Package weight (g)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)

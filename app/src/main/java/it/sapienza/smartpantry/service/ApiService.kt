@@ -43,7 +43,8 @@ data class PantryAddRequest(
     val kcal: Double,
     val prot: Double,
     val fat: Double,
-    val carbs: Double
+    val carbs: Double,
+    val packageWeightGrams: Double? = null
 )
 
 data class PantryQuantityRequest(
@@ -60,5 +61,6 @@ data class PantryItemUpdateRequest(
     val kcal: Double? = null,
     val prot: Double? = null,
     val fat: Double? = null,
-    val carbs: Double? = null
+    val carbs: Double? = null,
+    val packageWeightGrams: Double? = null
 )

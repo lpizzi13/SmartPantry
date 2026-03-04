@@ -129,13 +129,18 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     }
 
     val resolvedUid = user.uid.ifBlank { FirebaseAuth.getInstance().currentUser?.uid.orEmpty() }
+    val topBarTitle = if (currentDestination?.route == Screen.Pantry.route) {
+        stringResource(id = R.string.title_pantry)
+    } else {
+        stringResource(id = R.string.app_name)
+    }
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(stringResource(id = R.string.app_name)) },
+                title = { Text(topBarTitle) },
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
                         Icon(

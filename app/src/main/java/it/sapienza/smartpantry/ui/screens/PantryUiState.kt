@@ -11,12 +11,12 @@ data class PantryUiState(
     val isSearching: Boolean = false,
     val isSaving: Boolean = false,
     val isScanning: Boolean = false,
-    val isPantryEditMode: Boolean = false,
     val isEditorVisible: Boolean = false,
     val editorNameInput: String = "",
     val editorQuantityInput: String = "1",
     val editorKcalInput: String = "0",
     val editorCarbsInput: String = "0",
     val editorProtInput: String = "0",
-    val editorFatInput: String = "0"
+    val editorFatInput: String = "0",
+    val editorPackageWeightGramsInput: String = "0"
 )

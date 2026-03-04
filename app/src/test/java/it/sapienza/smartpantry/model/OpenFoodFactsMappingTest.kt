@@ -11,7 +11,7 @@ class OpenFoodFactsMappingTest {
     @Test
     fun parses_flat_macros_from_search_response() {
         val raw = """
-            {"query":"pasta","products":[{"code":"123456","product_name":"Test Pasta","kcal":350,"prot":12.5,"fat":1.8,"carbs":70.2}]}
+            {"query":"pasta","products":[{"code":"123456","product_name":"Test Pasta","kcal":350,"prot":12.5,"fat":1.8,"carbs":70.2,"packageWeightGrams":1000}]}
         """.trimIndent()
         val parsed = gson.fromJson(raw, OpenFoodFactsSearchResponse::class.java)
         val product = parsed.products.first()
@@ -20,6 +20,7 @@ class OpenFoodFactsMappingTest {
         assertEquals(12.5, product.resolvedProt() ?: -1.0, 0.0001)
         assertEquals(1.8, product.resolvedFat() ?: -1.0, 0.0001)
         assertEquals(70.2, product.resolvedCarbs() ?: -1.0, 0.0001)
+        assertEquals(1000.0, product.resolvedPackageWeightGrams() ?: -1.0, 0.0001)
     }
 
     @Test
@@ -58,5 +59,6 @@ class OpenFoodFactsMappingTest {
         assertNull(product.resolvedProt())
         assertNull(product.resolvedFat())
         assertNull(product.resolvedCarbs())
+        assertNull(product.resolvedPackageWeightGrams())
     }
 }

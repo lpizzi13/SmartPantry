@@ -1,24 +1,31 @@
 package it.sapienza.smartpantry.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
@@ -27,14 +34,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +57,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +74,7 @@ import it.sapienza.smartpantry.model.PantryItem
 import it.sapienza.smartpantry.model.resolvedCarbs
 import it.sapienza.smartpantry.model.resolvedFat
 import it.sapienza.smartpantry.model.resolvedKcal
+import it.sapienza.smartpantry.model.resolvedPackageWeightGrams
 import it.sapienza.smartpantry.model.resolvedProt
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -110,13 +123,15 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
 
     fun onSearchQueryChange(value: String) = _uiState.update { it.copy(searchQuery = value) }
     fun onScanStateChanged(value: Boolean) = _uiState.update { it.copy(isScanning = value) }
-    fun togglePantryEditMode() = _uiState.update { it.copy(isPantryEditMode = !it.isPantryEditMode) }
     fun onEditorNameChange(value: String) = _uiState.update { it.copy(editorNameInput = value) }
     fun onEditorQuantityChange(value: String) = _uiState.update { it.copy(editorQuantityInput = value) }
     fun onEditorKcalChange(value: String) = _uiState.update { it.copy(editorKcalInput = value) }
     fun onEditorCarbsChange(value: String) = _uiState.update { it.copy(editorCarbsInput = value) }
     fun onEditorProtChange(value: String) = _uiState.update { it.copy(editorProtInput = value) }
     fun onEditorFatChange(value: String) = _uiState.update { it.copy(editorFatInput = value) }
+    fun onEditorPackageWeightGramsChange(value: String) = _uiState.update {
+        it.copy(editorPackageWeightGramsInput = value)
+    }
 
     fun dismissEditor() {
         currentEditorTarget = null
@@ -164,31 +179,35 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
             kcal = product.resolvedKcal(),
             carbs = product.resolvedCarbs(),
             prot = product.resolvedProt(),
-            fat = product.resolvedFat()
+            fat = product.resolvedFat(),
+            packageWeightGrams = product.resolvedPackageWeightGrams()
         )
     }
 
     fun openEditorFromManualEntry() {
         currentEditorTarget = EditorTarget.AddManual
-        openEditorWithValues(_uiState.value.searchQuery.trim(), 1L, 0.0, 0.0, 0.0, 0.0)
+        openEditorWithValues(
+            name = _uiState.value.searchQuery.trim(),
+            quantity = 1L,
+            kcal = 0.0,
+            carbs = 0.0,
+            prot = 0.0,
+            fat = 0.0,
+            packageWeightGrams = 0.0
+        )
     }
 
     fun openEditorFromPantryItem(item: PantryItem) {
         currentEditorTarget = EditorTarget.EditExisting(item.openFoodFactsId)
         openEditorWithValues(
-            item.productName,
-            item.quantity,
-            item.resolvedKcal(),
-            item.resolvedCarbs(),
-            item.resolvedProt(),
-            item.resolvedFat()
+            name = item.productName,
+            quantity = item.quantity,
+            kcal = item.resolvedKcal(),
+            carbs = item.resolvedCarbs(),
+            prot = item.resolvedProt(),
+            fat = item.resolvedFat(),
+            packageWeightGrams = item.resolvedPackageWeightGrams()
         )
-    }
-
-    fun incrementItem(item: PantryItem) = updateItemQuantityFromList(item, item.quantity + 1L)
-
-    fun decrementItem(item: PantryItem) {
-        if (item.quantity > 1L) updateItemQuantityFromList(item, item.quantity - 1L)
     }
 
     fun deleteItem(item: PantryItem) {
@@ -240,6 +259,10 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         val carbs = parseMacroOrNull(state.editorCarbsInput, "Carbs") ?: return
         val prot = parseMacroOrNull(state.editorProtInput, "Protein") ?: return
         val fat = parseMacroOrNull(state.editorFatInput, "Fat") ?: return
+        val packageWeightGrams = parseMacroOrNull(
+            state.editorPackageWeightGramsInput,
+            "Package weight (g)"
+        ) ?: return
 
         _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
@@ -253,7 +276,8 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                         kcal,
                         prot,
                         fat,
-                        carbs
+                        carbs,
+                        packageWeightGrams
                     )
                     is EditorTarget.AddManual -> repository.addItem(
                         currentUid,
@@ -263,7 +287,8 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                         kcal,
                         prot,
                         fat,
-                        carbs
+                        carbs,
+                        packageWeightGrams
                     )
                     is EditorTarget.EditExisting -> repository.updateItem(
                         currentUid,
@@ -273,7 +298,8 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                         kcal,
                         prot,
                         fat,
-                        carbs
+                        carbs,
+                        packageWeightGrams
                     )
                 }
                 if (result.isSuccess) {
@@ -331,7 +357,8 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                     kcal = resolution.kcal,
                     carbs = resolution.carbs,
                     prot = resolution.prot,
-                    fat = resolution.fat
+                    fat = resolution.fat,
+                    packageWeightGrams = resolution.packageWeightGrams
                 )
             } catch (error: Throwable) {
                 emitEvent("Operation failed: ${error.localizedMessage ?: "unknown error"}")
@@ -347,7 +374,8 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         kcal: Double?,
         carbs: Double?,
         prot: Double?,
-        fat: Double?
+        fat: Double?,
+        packageWeightGrams: Double?
     ) {
         _uiState.update {
             it.copy(
@@ -357,42 +385,9 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                 editorKcalInput = formatDecimalInput(kcal),
                 editorCarbsInput = formatDecimalInput(carbs),
                 editorProtInput = formatDecimalInput(prot),
-                editorFatInput = formatDecimalInput(fat)
+                editorFatInput = formatDecimalInput(fat),
+                editorPackageWeightGramsInput = formatDecimalInput(packageWeightGrams)
             )
-        }
-    }
-
-    private fun updateItemQuantityFromList(item: PantryItem, newQuantity: Long) {
-        if (currentUid.isBlank()) {
-            emitEvent("User not authenticated. Please log in again.")
-            return
-        }
-        if (newQuantity < 1L) return
-
-        _uiState.update { it.copy(isSaving = true) }
-        viewModelScope.launch {
-            try {
-                val result = repository.updateQuantity(currentUid, item.openFoodFactsId, newQuantity)
-                if (result.isSuccess) {
-                    _uiState.update { state ->
-                        state.copy(
-                            pantryItems = state.pantryItems.map { current ->
-                                if (current.openFoodFactsId == item.openFoodFactsId) {
-                                    current.copy(quantity = newQuantity)
-                                } else {
-                                    current
-                                }
-                            }
-                        )
-                    }
-                } else {
-                    emitEvent(
-                        "Operation failed: ${result.exceptionOrNull()?.localizedMessage ?: "unknown error"}"
-                    )
-                }
-            } finally {
-                _uiState.update { it.copy(isSaving = false) }
-            }
         }
     }
 
@@ -442,6 +437,7 @@ fun PantryScreen(
     var selectedSortFieldName by rememberSaveable { mutableStateOf(PantrySortField.NAME.name) }
     var isSortAscending by rememberSaveable { mutableStateOf(true) }
     var isSortMenuExpanded by remember { mutableStateOf(false) }
+    var pendingDeletionItem by remember { mutableStateOf<PantryItem?>(null) }
     val pantryListState = rememberLazyListState()
     val selectedSortField = PantrySortField.valueOf(selectedSortFieldName)
     val visiblePantryItems = remember(
@@ -454,10 +450,7 @@ fun PantryScreen(
         val filtered = if (query.isBlank()) {
             uiState.pantryItems
         } else {
-            uiState.pantryItems.filter { item ->
-                item.productName.contains(query, ignoreCase = true) ||
-                    item.openFoodFactsId.contains(query, ignoreCase = true)
-            }
+            uiState.pantryItems.filter { item -> item.productName.contains(query, ignoreCase = true) }
         }
         sortPantryItems(filtered, selectedSortField, isSortAscending)
     }
@@ -498,43 +491,66 @@ fun PantryScreen(
         return
     }
 
-    Scaffold { innerPadding ->
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(onClick = onOpenSearchFood) {
+                Icon(Icons.Default.Add, contentDescription = "Add item")
+            }
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             OutlinedTextField(
                 value = pantryFilterQuery,
                 onValueChange = { pantryFilterQuery = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("Search pantry items") }
+                placeholder = { Text("Search pantry items") }
             )
             Spacer(modifier = Modifier.height(8.dp))
+
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "${visiblePantryItems.size} items",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                OutlinedButton(onClick = onOpenSearchFood) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Items")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Items")
-                }
                 Spacer(modifier = Modifier.weight(1f))
-                TextButton(onClick = pantryViewModel::togglePantryEditMode) {
-                    Text(if (uiState.isPantryEditMode) "Done" else "Edit")
-                }
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.weight(1f)) {
-                    OutlinedButton(onClick = { isSortMenuExpanded = true }) {
-                        Text("Sort: ${selectedSortField.label}")
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Sort: ${selectedSortField.label}",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .clickable { isSortMenuExpanded = true }
+                                .padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                        IconButton(
+                            onClick = { isSortAscending = !isSortAscending },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSortAscending) {
+                                    Icons.Default.ArrowUpward
+                                } else {
+                                    Icons.Default.ArrowDownward
+                                },
+                                contentDescription = if (isSortAscending) {
+                                    "Ascending"
+                                } else {
+                                    "Descending"
+                                }
+                            )
+                        }
                     }
                     DropdownMenu(
                         expanded = isSortMenuExpanded,
@@ -551,13 +567,9 @@ fun PantryScreen(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                OutlinedButton(onClick = { isSortAscending = !isSortAscending }) {
-                    Text(if (isSortAscending) "Ascending" else "Descending")
-                }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (uiState.pantryItems.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -574,22 +586,49 @@ fun PantryScreen(
                 LazyColumn(
                     state = pantryListState,
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(visiblePantryItems, key = { it.openFoodFactsId }) { item ->
-                        PantryItemRow(
+                        PantrySwipeToDeleteItem(
                             item = item,
-                            isEditMode = uiState.isPantryEditMode,
                             isSaving = uiState.isSaving,
                             onEdit = { pantryViewModel.openEditorFromPantryItem(item) },
-                            onDelete = { pantryViewModel.deleteItem(item) },
-                            onIncrement = { pantryViewModel.incrementItem(item) },
-                            onDecrement = { pantryViewModel.decrementItem(item) }
+                            onDeleteRequested = { pendingDeletionItem = item }
                         )
                     }
                 }
             }
         }
+    }
+
+    pendingDeletionItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!uiState.isSaving) pendingDeletionItem = null
+            },
+            title = { Text("Remove item?") },
+            text = { Text("Are you sure you want to remove this item from the pantry?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pantryViewModel.deleteItem(item)
+                        pendingDeletionItem = null
+                    },
+                    enabled = !uiState.isSaving
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingDeletionItem = null },
+                    enabled = !uiState.isSaving
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (uiState.isEditorVisible) {
@@ -603,73 +642,105 @@ fun PantryScreen(
             onCarbsChange = pantryViewModel::onEditorCarbsChange,
             onProtChange = pantryViewModel::onEditorProtChange,
             onFatChange = pantryViewModel::onEditorFatChange,
+            onPackageWeightGramsChange = pantryViewModel::onEditorPackageWeightGramsChange,
             onSave = pantryViewModel::saveEditor
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PantryItemRow(
+private fun PantrySwipeToDeleteItem(
     item: PantryItem,
-    isEditMode: Boolean,
     isSaving: Boolean,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onIncrement: () -> Unit,
-    onDecrement: () -> Unit
+    onDeleteRequested: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            val isManualItem = item.openFoodFactsId.startsWith("manual", ignoreCase = true)
-            Text(
-                if (item.productName.isBlank()) "Unnamed product" else item.productName,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                if (isManualItem) "Manual item" else "OpenFoodFacts ID: ${item.openFoodFactsId}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "kcal ${formatDecimalInput(item.resolvedKcal())} | carbs ${formatDecimalInput(item.resolvedCarbs())} | prot ${formatDecimalInput(item.resolvedProt())} | fat ${formatDecimalInput(item.resolvedFat())}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                "Qty: ${item.quantity}",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
-            )
-            if (isEditMode) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = onDecrement, enabled = !isSaving && item.quantity > 1L) {
-                        Text("-")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        "Qty ${item.quantity}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedButton(onClick = onIncrement, enabled = !isSaving) {
-                        Text("+")
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    TextButton(onClick = onEdit, enabled = !isSaving) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit item")
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Edit")
-                    }
-                    IconButton(onClick = onDelete, enabled = !isSaving) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete item")
-                    }
-                }
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { targetValue ->
+            if (targetValue == SwipeToDismissBoxValue.EndToStart && !isSaving) {
+                onDeleteRequested()
+            }
+            false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        backgroundContent = {
+            val isActive = dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart
+            val backgroundColor = if (isActive) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(backgroundColor)
+                    .padding(horizontal = 16.dp, vertical = 18.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(
+                    "Delete",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    ) {
+        PantryItemCard(item = item, isSaving = isSaving, onEdit = onEdit)
+    }
+}
+
+@Composable
+private fun PantryItemCard(
+    item: PantryItem,
+    isSaving: Boolean,
+    onEdit: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !isSaving, onClick = onEdit)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (item.productName.isBlank()) "Unnamed product" else item.productName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "kcal ${formatDecimalInput(item.resolvedKcal())} • carbs ${formatDecimalInput(item.resolvedCarbs())} • protein ${formatDecimalInput(item.resolvedProt())} • fat ${formatDecimalInput(item.resolvedFat())}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "Quantity: ${item.quantity} • Weight package: ${formatDecimalInput(item.resolvedPackageWeightGrams())} g",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onEdit, enabled = !isSaving, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit item")
             }
         }
     }
@@ -686,6 +757,7 @@ private fun FoodEditorDialog(
     onCarbsChange: (String) -> Unit,
     onProtChange: (String) -> Unit,
     onFatChange: (String) -> Unit,
+    onPackageWeightGramsChange: (String) -> Unit,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -730,7 +802,7 @@ private fun FoodEditorDialog(
                 OutlinedTextField(
                     value = state.editorProtInput,
                     onValueChange = onProtChange,
-                    label = { Text("Prot") },
+                    label = { Text("Protein") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -739,6 +811,14 @@ private fun FoodEditorDialog(
                     value = state.editorFatInput,
                     onValueChange = onFatChange,
                     label = { Text("Fat") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = state.editorPackageWeightGramsInput,
+                    onValueChange = onPackageWeightGramsChange,
+                    label = { Text("Weight package (g)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -771,11 +851,10 @@ private fun formatDecimalInput(value: Double?): String {
 
 private enum class PantrySortField(val label: String) {
     NAME("Name"),
-    QUANTITY("Quantity"),
-    KCAL("Kcal"),
-    PROTEIN("Protein"),
-    CARBS("Carbs"),
-    FAT("Fat")
+    KCAL("kcal"),
+    CARBS("carbs"),
+    PROTEIN("protein"),
+    FAT("fat")
 }
 
 private fun sortPantryItems(
@@ -785,11 +864,11 @@ private fun sortPantryItems(
 ): List<PantryItem> {
     val sorted = when (field) {
         PantrySortField.NAME -> items.sortedBy { it.productName.trim().lowercase(Locale.US) }
-        PantrySortField.QUANTITY -> items.sortedBy { it.quantity }
         PantrySortField.KCAL -> items.sortedBy { it.resolvedKcal() ?: 0.0 }
-        PantrySortField.PROTEIN -> items.sortedBy { it.resolvedProt() ?: 0.0 }
         PantrySortField.CARBS -> items.sortedBy { it.resolvedCarbs() ?: 0.0 }
+        PantrySortField.PROTEIN -> items.sortedBy { it.resolvedProt() ?: 0.0 }
         PantrySortField.FAT -> items.sortedBy { it.resolvedFat() ?: 0.0 }
     }
     return if (ascending) sorted else sorted.asReversed()
 }
+
