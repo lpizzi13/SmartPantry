@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DayPlan
 import it.sapienza.smartpantry.model.Diet
-import it.sapienza.smartpantry.model.DietDefaults
 import it.sapienza.smartpantry.model.DietViewModel
 
 @Composable

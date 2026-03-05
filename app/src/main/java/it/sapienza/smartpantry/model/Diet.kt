@@ -35,14 +35,12 @@ data class Diet(
 )
 
 object DietDefaults {
-    const val WEEKLY_DIET_NAME = "Weekly Diet Plan"
     const val NEW_DIET_NAME = "New Diet"
     val weekDays = listOf(
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
     ).map { DayPlan(it) }
 
     fun initialDiets(): List<Diet> = listOf(
-        Diet(name = WEEKLY_DIET_NAME, days = weekDays, isWeekly = true),
         Diet(name = NEW_DIET_NAME, isEditable = true, isWeekly = false)
     )
 }
@@ -105,9 +103,6 @@ class DietViewModel : ViewModel() {
     private fun normalizeDiets(remoteDiets: List<Diet>): List<Diet> {
         if (remoteDiets.isEmpty()) return DietDefaults.initialDiets()
         val normalized = remoteDiets.toMutableList()
-        if (!normalized.any { it.name == DietDefaults.WEEKLY_DIET_NAME }) {
-            normalized.add(0, Diet(name = DietDefaults.WEEKLY_DIET_NAME, days = DietDefaults.weekDays, isWeekly = true))
-        }
         if (!normalized.any { it.name == DietDefaults.NEW_DIET_NAME && it.isEditable }) {
             normalized.add(Diet(name = DietDefaults.NEW_DIET_NAME, isEditable = true, isWeekly = false))
         }
@@ -156,7 +151,7 @@ class DietViewModel : ViewModel() {
 
     fun onDietNameChanged(dietId: String, newName: String) {
         val trimmedName = newName.trim()
-        if (trimmedName.isBlank() || trimmedName == DietDefaults.WEEKLY_DIET_NAME) return
+        if (trimmedName.isBlank()) return
         updatePersistentState { state ->
             val dietToUpdate = state.diets.find { it.id == dietId }
             if (dietToUpdate?.name == DietDefaults.NEW_DIET_NAME && trimmedName != DietDefaults.NEW_DIET_NAME) {
