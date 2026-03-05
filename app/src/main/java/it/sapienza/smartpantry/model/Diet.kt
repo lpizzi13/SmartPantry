@@ -48,6 +48,7 @@ data class DietRequest(
 
 data class DietPayload(
     @SerializedName("diets") val diets: List<Diet> = emptyList(),
+    //Serve per ricordare l'ultima dieta visualizzata
     @SerializedName("selectedDietId") val selectedDietId: String? = null
 )
 

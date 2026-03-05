@@ -1,5 +1,6 @@
 package it.sapienza.smartpantry.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -28,14 +30,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.Diet
 import it.sapienza.smartpantry.model.DietViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
+    // Osserva lo stato globale dal ViewModel (lista diete, dieta selezionata, ecc.)
     val uiState by dietViewModel.uiState.collectAsState()
+
+    // STATO LOCALE: Gestisce l'apertura/chiusura del menu a tendina delle diete
     var menuExpanded by remember { mutableStateOf(false) }
+
+    // STATO LOCALE: Se non è null, indica quale oggetto 'Diet' stiamo rinominando e apre il Dialog
     var renameDialogOpen by remember { mutableStateOf<Diet?>(null) }
+
+    // STATO LOCALE: Buffer temporaneo per il testo che l'utente scrive nel campo "Rinomina"
     var renameDraft by remember { mutableStateOf("") }
 
+    // Inizializza il ViewModel con l'ID utente
     LaunchedEffect(uid) {
         if (uid.isNotBlank()) {
             dietViewModel.initialize(uid)
@@ -49,23 +58,27 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        ExposedDropdownMenuBox(
-            expanded = menuExpanded,
-            onExpandedChange = { menuExpanded = !menuExpanded }
-        ) {
-            OutlinedTextField(
-                value = uiState.selectedDiet?.name ?: "",
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded)
-                },
+        // --- SELETTORE DIETA (Semplificato senza il box OutlinedTextField) ---
+        Box {
+            Row(
                 modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth()
-            )
+                    .clickable { menuExpanded = true }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = uiState.selectedDiet?.name ?: "Seleziona Dieta",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Seleziona dieta"
+                )
+            }
 
-            ExposedDropdownMenu(
+            // Menu a tendina per cambiare dieta
+            DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { menuExpanded = false }
             ) {
@@ -99,6 +112,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             }
         }
 
+        // Dialogo per rinominare la dieta
         renameDialogOpen?.let { diet ->
             AlertDialog(
                 onDismissRequest = { renameDialogOpen = null },
@@ -130,6 +144,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             )
         }
 
+        // Visualizzazione del contenuto in base alla dieta selezionata
         uiState.selectedDiet?.let { diet ->
             if (diet.name == "Weekly Diet Plan") {
                 WeeklyDietPlanContent(
@@ -147,6 +162,9 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
     }
 }
 
+/**
+ * Visualizza i giorni della dieta settimanale (Lun-Dom).
+ */
 @Composable
 private fun WeeklyDietPlanContent(
     diet: Diet,
@@ -195,6 +213,9 @@ private fun WeeklyDietPlanContent(
     }
 }
 
+/**
+ * Visualizza i giorni di una dieta personalizzata e permette di aggiungerne di nuovi.
+ */
 @Composable
 private fun NewDietContent(
     diet: Diet,
@@ -211,6 +232,7 @@ private fun NewDietContent(
                 .padding(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Messaggio se la dieta è vuota
             if (diet.days.isEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -234,6 +256,7 @@ private fun NewDietContent(
                 }
             }
 
+            // Lista dei giorni
             diet.days.forEachIndexed { index, day ->
                 val isExpanded = diet.expandedDayIndex == index
 
@@ -277,6 +300,7 @@ private fun NewDietContent(
             }
         }
 
+        // Bottone fluttuante per aggiungere giorni
         FloatingActionButton(
             onClick = {
                 val nextDayNumber = diet.days.count { it.startsWith("Day ") } + 1
@@ -294,6 +318,7 @@ private fun NewDietContent(
         }
     }
 
+    // Dialogo per l'aggiunta di un nuovo giorno
     if (addDayDialogOpen) {
         AlertDialog(
             onDismissRequest = { addDayDialogOpen = false },
