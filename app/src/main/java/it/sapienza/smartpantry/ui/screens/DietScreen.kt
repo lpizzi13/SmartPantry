@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -68,7 +71,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // --- SELETTORE DIETA E SWITCH WEEKLY ---
+        // --- SELETTORE DIETA, FAVORITE E SWITCH WEEKLY ---
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -101,6 +104,16 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                     uiState.diets.forEach { diet ->
                         DropdownMenuItem(
                             text = { Text(diet.name) },
+                            leadingIcon = {
+                                if (diet.isFavorite) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = null,
+                                        tint = Color.Red,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
                             onClick = {
                                 dietViewModel.onDietSelected(diet.id)
                                 menuExpanded = false
@@ -128,25 +141,39 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                 }
             }
 
-            // Switch per convertire in Weekly Diet (visibile solo se la dieta è modificabile)
-            uiState.selectedDiet?.let { diet ->
-                if (diet.isEditable) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Weekly", style = MaterialTheme.typography.labelMedium)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Switch(
-                            checked = diet.isWeekly,
-                            onCheckedChange = { isChecked ->
-                                // Mostra il warning solo se ci sono alimenti inseriti
-                                val hasFoods = diet.days.any { it.foods.isNotEmpty() }
-                                if (hasFoods) {
-                                    pendingWeeklyToggle = isChecked
-                                    showWeeklyWarning = true
-                                } else {
-                                    dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
-                                }
-                            }
+            // Colonna destra: Favorite e Switch Weekly
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                uiState.selectedDiet?.let { diet ->
+                    // Tasto Cuore per la Dieta Preferita
+                    IconButton(onClick = { dietViewModel.toggleFavorite(diet.id) }) {
+                        Icon(
+                            imageVector = if (diet.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (diet.isFavorite) Color.Red else LocalContentColor.current
                         )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Switch per convertire in Weekly Diet (visibile solo se la dieta è modificabile)
+                    if (diet.isEditable) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Weekly", style = MaterialTheme.typography.labelMedium)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = diet.isWeekly,
+                                onCheckedChange = { isChecked ->
+                                    // Mostra il warning solo se ci sono alimenti inseriti
+                                    val hasFoods = diet.days.any { it.foods.isNotEmpty() }
+                                    if (hasFoods) {
+                                        pendingWeeklyToggle = isChecked
+                                        showWeeklyWarning = true
+                                    } else {
+                                        dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }

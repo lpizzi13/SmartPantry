@@ -30,7 +30,8 @@ data class Diet(
     val days: List<DayPlan> = emptyList(),
     val isEditable: Boolean = false,
     val expandedDayIndices: Set<Int> = emptySet(),
-    val isWeekly: Boolean = false
+    val isWeekly: Boolean = false,
+    val isFavorite: Boolean = false
 )
 
 object DietDefaults {
@@ -209,6 +210,22 @@ class DietViewModel : ViewModel() {
                         expandedDayIndices = emptySet()
                     )
                 } else diet
+            }
+            state.copy(diets = updatedDiets)
+        }
+    }
+
+    fun toggleFavorite(dietId: String) {
+        updatePersistentState { state ->
+            val updatedDiets = state.diets.map { diet ->
+                if (diet.id == dietId) {
+                    // Se questa dieta era già preferita, la togliamo. 
+                    // Altrimenti la impostiamo come preferita (e togliamo il flag a tutte le altre)
+                    diet.copy(isFavorite = !diet.isFavorite)
+                } else {
+                    // Togliamo il flag di preferita a tutte le altre diete
+                    diet.copy(isFavorite = false)
+                }
             }
             state.copy(diets = updatedDiets)
         }
