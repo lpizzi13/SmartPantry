@@ -25,7 +25,11 @@ import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
+import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,13 +73,14 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     val currentDestination = navBackStackEntry?.destination
     
     var user by remember { mutableStateOf(initialUser) }
+    val today = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH).format(Date())
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(stringResource(id = R.string.app_name)) },
+                title = { Text(text = today) },
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
                         Icon(
@@ -158,7 +163,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Home.route) { PlaceholderScreen(stringResource(id = R.string.text_home_screen)) }
+            composable(Screen.Home.route) { HomeScreen(user) }
             composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
             composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
             composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }

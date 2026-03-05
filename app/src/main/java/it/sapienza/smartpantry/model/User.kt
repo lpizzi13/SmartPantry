@@ -47,3 +47,13 @@ data class UpdateUserResponse(
     @SerializedName("dailyKcal") val dailyKcal: Int = 0,
     @SerializedName("macros") val macros: Map<String, Int> = emptyMap()
 )
+
+data class RegisterRequest(
+    @SerializedName("email") val email: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("biometrics") val biometrics: Biometrics,
+    @SerializedName("goals") val goals: Goals,
+    @SerializedName("profile_image_url") val profileImageUrl: String,
+    @SerializedName("manualOverride") val manualOverride: Boolean
+)
