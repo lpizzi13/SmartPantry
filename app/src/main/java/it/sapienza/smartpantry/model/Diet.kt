@@ -25,13 +25,18 @@ data class DayPlan(
  * Rappresenta una Dieta.
  */
 data class Diet(
-    val id: String = UUID.randomUUID().toString(),
+    // DUID univoco della dieta. Compatibile con payload legacy che usavano "id"/"DUID".
+    @SerializedName(value = "duid", alternate = ["id", "DUID"])
+    val duid: String = UUID.randomUUID().toString(),
     val name: String,
     val days: List<DayPlan> = emptyList(),
     val expandedDayIndices: Set<Int> = emptySet(),
     val isWeekly: Boolean = false,
     val isFavorite: Boolean = false
-)
+) {
+    val id: String
+        get() = duid
+}
 
 object DietDefaults {
     const val NEW_DIET_NAME = "New Diet"
@@ -86,12 +91,17 @@ class DietViewModel : ViewModel() {
         RetrofitClient.instance.getDiet(DietRequest(uid)).enqueue(object : Callback<DietResponse> {
             override fun onResponse(call: Call<DietResponse>, response: Response<DietResponse>) {
                 if (!response.isSuccessful) return
-                val remoteDietData = response.body()?.dietData ?: return
-                val normalizedDiets = normalizeDiets(remoteDietData.diets)
-                val selectedId = remoteDietData.selectedDietId
+                val remoteDietData = response.body()?.dietData
+                val remoteDiets = remoteDietData?.diets.orEmpty()
+                val normalizedDiets = normalizeDiets(remoteDiets)
+                val selectedId = remoteDietData?.selectedDietId
                     ?.takeIf { requestedId -> normalizedDiets.any { it.id == requestedId } }
                     ?: normalizedDiets.firstOrNull()?.id
                 _uiState.update { it.copy(diets = normalizedDiets, selectedDietId = selectedId) }
+                // Se il backend non ha ancora dati dieta, inizializziamo subito lo schema libero di default.
+                if (remoteDiets.isEmpty()) {
+                    persistDietState()
+                }
             }
             override fun onFailure(call: Call<DietResponse>, t: Throwable) {
                 Log.e("DIET_LOAD", "Failure: ${t.message}")
@@ -198,6 +208,7 @@ class DietViewModel : ViewModel() {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
+                    // Mantiene lo stesso DUID: cambia solo la struttura della dieta.
                     diet.copy(
                         isWeekly = isWeekly,
                         days = if (isWeekly) DietDefaults.weekDays else emptyList(),
