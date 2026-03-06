@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,221 +41,255 @@ import it.sapienza.smartpantry.model.DietViewModel
 
 @Composable
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
-    // Osserva lo stato globale dal ViewModel
+    // Observe global state from ViewModel
     val uiState by dietViewModel.uiState.collectAsState()
 
-    // STATO LOCALE: Gestisce l'apertura/chiusura del menu a tendina delle diete
+    // LOCAL STATE: Manages opening/closing of the diet dropdown menu
     var menuExpanded by remember { mutableStateOf(false) }
 
-    // STATO LOCALE: Se non è null, indica quale oggetto 'Diet' stiamo rinominando e apre il Dialog
+    // LOCAL STATE: Dialog for renaming diet
     var renameDialogOpen by remember { mutableStateOf<Diet?>(null) }
-
-    // STATO LOCALE: Buffer temporaneo per il testo che l'utente scrive nel campo "Rinomina"
     var renameDraft by remember { mutableStateOf("") }
 
-    // STATO LOCALE: Gestisce il warning per il cambio di modalità Weekly/Custom
+    // LOCAL STATE: Dialog for creating new diet
+    var addDietDialogOpen by remember { mutableStateOf(false) }
+    var newDietNameDraft by remember { mutableStateOf("") }
+
+    // LOCAL STATE: Manages warning for Weekly/Custom mode change
     var showWeeklyWarning by remember { mutableStateOf(false) }
     var pendingWeeklyToggle by remember { mutableStateOf(false) }
 
-    // Inizializza il ViewModel con l'ID utente
+    // Initialize ViewModel with user ID
     LaunchedEffect(uid) {
         if (uid.isNotBlank()) {
             dietViewModel.initialize(uid)
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        // --- SELETTORE DIETA, FAVORITE E SWITCH WEEKLY ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Box per il selettore della dieta
-            Box {
-                Row(
-                    modifier = Modifier
-                        .clickable { menuExpanded = true }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = uiState.selectedDiet?.name ?: "Seleziona Dieta",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Seleziona dieta"
-                    )
-                }
-
-                // Menu a tendina per cambiare dieta
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
-                ) {
-                    uiState.diets.forEach { diet ->
-                        DropdownMenuItem(
-                            text = { Text(diet.name) },
-                            leadingIcon = {
-                                if (diet.isFavorite) {
-                                    Icon(
-                                        imageVector = Icons.Default.Favorite,
-                                        contentDescription = null,
-                                        tint = Color.Red,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            },
-                            onClick = {
-                                dietViewModel.onDietSelected(diet.id)
-                                menuExpanded = false
-                            },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = {
-                                        renameDraft = diet.name
-                                        renameDialogOpen = diet
-                                        menuExpanded = false
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Edit,
-                                        contentDescription = "Rename diet"
-                                    )
-                                }
-                            }
+            // --- DIET SELECTOR, FAVORITE AND WEEKLY SWITCH ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Box for diet selector
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clickable { menuExpanded = true }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = uiState.selectedDiet?.name ?: "Select Diet",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
-                }
-            }
-
-            // Colonna destra: Favorite e Switch Weekly
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                uiState.selectedDiet?.let { diet ->
-                    // Tasto Cuore per la Dieta Preferita
-                    IconButton(onClick = { dietViewModel.toggleFavorite(diet.id) }) {
                         Icon(
-                            imageVector = if (diet.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (diet.isFavorite) Color.Red else LocalContentColor.current
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select diet"
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    // Switch per convertire in Weekly Diet
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Weekly", style = MaterialTheme.typography.labelMedium)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Switch(
-                            checked = diet.isWeekly,
-                            onCheckedChange = { isChecked ->
-                                // Mostra il warning solo se ci sono alimenti inseriti
-                                val hasFoods = diet.days.any { it.foods.isNotEmpty() }
-                                if (hasFoods) {
-                                    pendingWeeklyToggle = isChecked
-                                    showWeeklyWarning = true
-                                } else {
-                                    dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
+                    // Dropdown menu to change diet
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        uiState.diets.forEach { diet ->
+                            DropdownMenuItem(
+                                text = { Text(diet.name) },
+                                leadingIcon = {
+                                    if (diet.isFavorite) {
+                                        Icon(
+                                            imageVector = Icons.Default.Favorite,
+                                            contentDescription = null,
+                                            tint = Color.Red,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    dietViewModel.onDietSelected(diet.id)
+                                    menuExpanded = false
+                                },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = {
+                                            renameDraft = diet.name
+                                            renameDialogOpen = diet
+                                            menuExpanded = false
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Edit,
+                                            contentDescription = "Rename diet"
+                                        )
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
+                    }
+                }
+
+                // Right column: Favorite and Weekly Switch
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    uiState.selectedDiet?.let { diet ->
+                        // Heart button for Favorite Diet
+                        IconButton(onClick = { dietViewModel.toggleFavorite(diet.id) }) {
+                            Icon(
+                                imageVector = if (diet.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "Favorite",
+                                tint = if (diet.isFavorite) Color.Red else LocalContentColor.current
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Switch to convert to Weekly Diet
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Weekly", style = MaterialTheme.typography.labelMedium)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = diet.isWeekly,
+                                onCheckedChange = { isChecked ->
+                                    val hasFoods = diet.days.any { it.foods.isNotEmpty() }
+                                    if (hasFoods) {
+                                        pendingWeeklyToggle = isChecked
+                                        showWeeklyWarning = true
+                                    } else {
+                                        dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // --- DIALOGO DI WARNING PER CAMBIO MODALITÀ ---
-        if (showWeeklyWarning) {
-            AlertDialog(
-                onDismissRequest = { showWeeklyWarning = false },
-                title = { Text("Attenzione") },
-                text = { 
-                    Text("Cambiando lo stato della dieta perderai tutti gli alimenti attualmente inseriti. Vuoi procedere?") 
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            uiState.selectedDiet?.let { diet ->
-                                dietViewModel.onDietWeeklyToggled(diet.id, pendingWeeklyToggle)
-                            }
-                            showWeeklyWarning = false
-                        }
-                    ) {
-                        Text("Procedi")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showWeeklyWarning = false }) {
-                        Text("Annulla")
-                    }
-                }
-            )
-        }
-
-        // Dialogo per rinominare la dieta
-        renameDialogOpen?.let { diet ->
-            AlertDialog(
-                onDismissRequest = { renameDialogOpen = null },
-                title = { Text("Rename diet") },
-                text = {
-                    OutlinedTextField(
-                        value = renameDraft,
-                        onValueChange = { renameDraft = it },
-                        singleLine = true,
-                        label = { Text("Diet name") },
-                        placeholder = { Text("New Diet") }
+            // Content display based on selected diet
+            uiState.selectedDiet?.let { diet ->
+                if (diet.isWeekly) {
+                    WeeklyDietPlanContent(
+                        diet = diet,
+                        onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
+                        onAddFood = { dayIndex, foodName -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName) }
                     )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            dietViewModel.onDietNameChanged(diet.id, renameDraft)
-                            renameDialogOpen = null
-                        }
-                    ) {
-                        Text("Save")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { renameDialogOpen = null }) {
-                        Text("Cancel")
-                    }
+                } else {
+                    NewDietContent(
+                        diet = diet,
+                        onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
+                        onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.id, dayName) },
+                        onAddFood = { dayIndex, foodName -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName) }
+                    )
                 }
-            )
-        }
-
-        // Visualizzazione del contenuto in base alla dieta selezionata
-        uiState.selectedDiet?.let { diet ->
-            if (diet.isWeekly) {
-                WeeklyDietPlanContent(
-                    diet = diet,
-                    onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
-                    onAddFood = { dayIndex, foodName -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName) }
-                )
-            } else {
-                NewDietContent(
-                    diet = diet,
-                    onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
-                    onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.id, dayName) },
-                    onAddFood = { dayIndex, foodName -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName) }
-                )
+            } ?: run {
+                // Message if no diets are present
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No diets found. Create one using the + button", style = MaterialTheme.typography.bodyLarge)
+                }
             }
         }
+
+        // --- FAB FOR NEW DIET (BOTTOM RIGHT) ---
+        FloatingActionButton(
+            onClick = {
+                newDietNameDraft = "New Diet ${uiState.diets.size + 1}"
+                addDietDialogOpen = true
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Icon(Icons.Default.PostAdd, contentDescription = "Add Diet")
+        }
+    }
+
+    // --- DIALOGS ---
+
+    if (showWeeklyWarning) {
+        AlertDialog(
+            onDismissRequest = { showWeeklyWarning = false },
+            title = { Text("Warning") },
+            text = { Text("Changing the diet mode will clear all currently added foods. Do you want to proceed?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        uiState.selectedDiet?.let { diet ->
+                            dietViewModel.onDietWeeklyToggled(diet.id, pendingWeeklyToggle)
+                        }
+                        showWeeklyWarning = false
+                    }
+                ) { Text("Proceed") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWeeklyWarning = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    renameDialogOpen?.let { diet ->
+        AlertDialog(
+            onDismissRequest = { renameDialogOpen = null },
+            title = { Text("Rename diet") },
+            text = {
+                OutlinedTextField(
+                    value = renameDraft,
+                    onValueChange = { renameDraft = it },
+                    singleLine = true,
+                    label = { Text("Diet name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        dietViewModel.onDietNameChanged(diet.id, renameDraft)
+                        renameDialogOpen = null
+                    }
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameDialogOpen = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (addDietDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { addDietDialogOpen = false },
+            title = { Text("New Diet") },
+            text = {
+                OutlinedTextField(
+                    value = newDietNameDraft,
+                    onValueChange = { newDietNameDraft = it },
+                    singleLine = true,
+                    label = { Text("Diet name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        dietViewModel.addNewDiet(newDietNameDraft)
+                        addDietDialogOpen = false
+                    }
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { addDietDialogOpen = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
-/**
- * Visualizza i giorni della dieta settimanale (Lun-Dom).
- */
 @Composable
 private fun WeeklyDietPlanContent(
     diet: Diet,
@@ -271,9 +306,6 @@ private fun WeeklyDietPlanContent(
     }
 }
 
-/**
- * Visualizza i giorni di una dieta personalizzata e permette di aggiungerne di nuovi.
- */
 @Composable
 private fun NewDietContent(
     diet: Diet,
@@ -291,31 +323,6 @@ private fun NewDietContent(
                 .padding(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Messaggio se la dieta è vuota
-            if (diet.days.isEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Crea i giorni per questa dieta.",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Usa il tasto + in basso per aggiungere un nuovo giorno.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Lista dei giorni
             diet.days.forEachIndexed { index, dayPlan ->
                 DayCard(
                     dayPlan = dayPlan,
@@ -326,62 +333,48 @@ private fun NewDietContent(
             }
         }
 
-        // Bottone fluttuante per aggiungere giorni
+        // Floating button to add days - MOVED TO LEFT
         FloatingActionButton(
             onClick = {
-                val nextDayNumber = diet.days.count { it.name.startsWith("Giorno ") } + 1
-                newDayDraft = "Giorno $nextDayNumber"
+                val nextDayNumber = diet.days.count { it.name.startsWith("Day ") } + 1
+                newDayDraft = "Day $nextDayNumber"
                 addDayDialogOpen = true
             },
             modifier = Modifier
-                .align(Alignment.BottomEnd)
+                .align(Alignment.BottomStart)
                 .padding(16.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.Add,
-                contentDescription = "Aggiungi giorno"
-            )
+            Icon(Icons.Filled.Add, contentDescription = "Add day")
         }
     }
 
-    // Dialogo per l'aggiunta di un nuovo giorno
     if (addDayDialogOpen) {
         AlertDialog(
             onDismissRequest = { addDayDialogOpen = false },
-            title = { Text("Aggiungi giorno") },
+            title = { Text("Add day") },
             text = {
                 OutlinedTextField(
                     value = newDayDraft,
                     onValueChange = { newDayDraft = it },
                     singleLine = true,
-                    label = { Text("Nome giorno") },
-                    placeholder = { Text("Giorno ${diet.days.count { it.name.startsWith("Giorno ") } + 1}") }
+                    label = { Text("Day name") }
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        val fallbackDayName = "Giorno ${diet.days.count { it.name.startsWith("Giorno ") } + 1}"
-                        val dayName = newDayDraft.trim().ifBlank { fallbackDayName }
-                        onAddDay(dayName)
+                        onAddDay(newDayDraft.trim().ifBlank { "Day ${diet.days.size + 1}" })
                         addDayDialogOpen = false
                     }
-                ) {
-                    Text("Aggiungi")
-                }
+                ) { Text("Add") }
             },
             dismissButton = {
-                TextButton(onClick = { addDayDialogOpen = false }) {
-                    Text("Annulla")
-                }
+                TextButton(onClick = { addDayDialogOpen = false }) { Text("Cancel") }
             }
         )
     }
 }
 
-/**
- * Rappresenta la scheda di un singolo giorno con la lista degli alimenti.
- */
 @Composable
 private fun DayCard(
     dayPlan: DayPlan,
@@ -394,67 +387,51 @@ private fun DayCard(
 
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Header: Nome giorno + Tasto Aggiungi Cibo + Tasto Show/Hide
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(dayPlan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row {
                     IconButton(onClick = { addFoodDialogOpen = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Aggiungi alimento", modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Add, contentDescription = "Add food")
                     }
                     TextButton(onClick = onDayClicked) {
-                        Text(if (isExpanded) "Nascondi" else "Mostra")
+                        Text(if (isExpanded) "Hide" else "Show")
                     }
                 }
             }
             
-            // Corpo della scheda: lista alimenti (visibile solo se isExpanded è true)
             if (isExpanded) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
                 if (dayPlan.foods.isEmpty()) {
-                    Text(
-                        text = "Nessun alimento aggiunto.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("No foods added.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     dayPlan.foods.forEach { food ->
-                        Text(
-                            text = "• $food",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
+                        Text("• $food", modifier = Modifier.padding(vertical = 2.dp))
                     }
                 }
             }
         }
     }
 
-    // Dialogo per l'aggiunta di un nuovo alimento
     if (addFoodDialogOpen) {
         AlertDialog(
             onDismissRequest = { addFoodDialogOpen = false },
-            title = { Text("Aggiungi Alimento a ${dayPlan.name}") },
+            title = { Text("Add Food to ${dayPlan.name}") },
             text = {
-                OutlinedTextField(
-                    value = foodDraft,
-                    onValueChange = { foodDraft = it },
-                    singleLine = true,
-                    label = { Text("Nome alimento") }
-                )
+                OutlinedTextField(value = foodDraft, onValueChange = { foodDraft = it }, singleLine = true, label = { Text("Food name") })
             },
             confirmButton = {
                 TextButton(onClick = {
                     onAddFood(foodDraft)
                     foodDraft = ""
                     addFoodDialogOpen = false
-                }) { Text("Aggiungi") }
+                }) { Text("Add") }
             },
             dismissButton = {
-                TextButton(onClick = { addFoodDialogOpen = false }) { Text("Annulla") }
+                TextButton(onClick = { addFoodDialogOpen = false }) { Text("Cancel") }
             }
         )
     }

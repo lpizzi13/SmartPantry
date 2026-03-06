@@ -39,14 +39,11 @@ data class Diet(
 }
 
 object DietDefaults {
-    const val NEW_DIET_NAME = "New Diet"
     val weekDays = listOf(
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
     ).map { DayPlan(it) }
 
-    fun initialDiets(): List<Diet> = listOf(
-        Diet(name = NEW_DIET_NAME, isWeekly = false)
-    )
+    fun initialDiets(): List<Diet> = emptyList()
 }
 
 data class DietUiState(
@@ -93,12 +90,16 @@ class DietViewModel : ViewModel() {
                 if (!response.isSuccessful) return
                 val remoteDietData = response.body()?.dietData
                 val remoteDiets = remoteDietData?.diets.orEmpty()
-                val normalizedDiets = normalizeDiets(remoteDiets)
-                val selectedId = remoteDietData?.selectedDietId
-                    ?.takeIf { requestedId -> normalizedDiets.any { it.id == requestedId } }
-                    ?: normalizedDiets.firstOrNull()?.id
-                _uiState.update { it.copy(diets = normalizedDiets, selectedDietId = selectedId) }
-                // Se il backend non ha ancora dati dieta, inizializziamo subito lo schema libero di default.
+                
+                // Priorità di selezione: 1. Dieta preferita, 2. selectedDietId dal backend, 3. Prima dieta della lista
+                val favoriteDietId = remoteDiets.find { it.isFavorite }?.id
+                val selectedId = favoriteDietId 
+                    ?: remoteDietData?.selectedDietId?.takeIf { requestedId -> remoteDiets.any { it.id == requestedId } }
+                    ?: remoteDiets.firstOrNull()?.id
+                
+                _uiState.update { it.copy(diets = remoteDiets, selectedDietId = selectedId) }
+                
+                // Se il backend non ha ancora dati dieta, inizializziamo subito se necessario (ma ora partiamo vuoti)
                 if (remoteDiets.isEmpty()) {
                     persistDietState()
                 }
@@ -107,15 +108,6 @@ class DietViewModel : ViewModel() {
                 Log.e("DIET_LOAD", "Failure: ${t.message}")
             }
         })
-    }
-
-    private fun normalizeDiets(remoteDiets: List<Diet>): List<Diet> {
-        if (remoteDiets.isEmpty()) return DietDefaults.initialDiets()
-        val normalized = remoteDiets.toMutableList()
-        if (!normalized.any { it.name == DietDefaults.NEW_DIET_NAME}) {
-            normalized.add(Diet(name = DietDefaults.NEW_DIET_NAME, isWeekly = false))
-        }
-        return normalized
     }
 
     private fun persistDietState() {
@@ -162,16 +154,18 @@ class DietViewModel : ViewModel() {
         val trimmedName = newName.trim()
         if (trimmedName.isBlank()) return
         updatePersistentState { state ->
-            val dietToUpdate = state.diets.find { it.id == dietId }
-            if (dietToUpdate?.name == DietDefaults.NEW_DIET_NAME && trimmedName != DietDefaults.NEW_DIET_NAME) {
-                val newDiet = dietToUpdate.copy(name = trimmedName)
-                val newDiets = state.diets.map { if (it.id == dietId) newDiet else it } +
-                        Diet(name = DietDefaults.NEW_DIET_NAME, isWeekly = false)
-                state.copy(diets = newDiets, selectedDietId = newDiet.id)
-            } else {
-                val updatedDiets = state.diets.map { if (it.id == dietId) it.copy(name = trimmedName) else it }
-                state.copy(diets = updatedDiets)
-            }
+            val updatedDiets = state.diets.map { if (it.id == dietId) it.copy(name = trimmedName) else it }
+            state.copy(diets = updatedDiets)
+        }
+    }
+
+    fun addNewDiet(name: String) {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) return
+        updatePersistentState { state ->
+            val newDiet = Diet(name = trimmedName)
+            val newDiets = state.diets + newDiet
+            state.copy(diets = newDiets, selectedDietId = newDiet.id)
         }
     }
 
@@ -208,7 +202,6 @@ class DietViewModel : ViewModel() {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
-                    // Mantiene lo stesso DUID: cambia solo la struttura della dieta.
                     diet.copy(
                         isWeekly = isWeekly,
                         days = if (isWeekly) DietDefaults.weekDays else emptyList(),
@@ -224,15 +217,22 @@ class DietViewModel : ViewModel() {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
-                    // Se questa dieta era già preferita, la togliamo. 
-                    // Altrimenti la impostiamo come preferita (e togliamo il flag a tutte le altre)
-                    diet.copy(isFavorite = !diet.isFavorite)
+                    val newFavoriteStatus = !diet.isFavorite
+                    // Se stiamo impostando questa come preferita, impostiamo selectedDietId a questa
+                    diet.copy(isFavorite = newFavoriteStatus)
                 } else {
-                    // Togliamo il flag di preferita a tutte le altre diete
                     diet.copy(isFavorite = false)
                 }
             }
-            state.copy(diets = updatedDiets)
+            
+            // Trova l'ID della dieta appena segnata come preferita (se presente)
+            val newFavoriteId = updatedDiets.find { it.isFavorite }?.id
+            
+            if (newFavoriteId != null) {
+                state.copy(diets = updatedDiets, selectedDietId = newFavoriteId)
+            } else {
+                state.copy(diets = updatedDiets)
+            }
         }
     }
 }
