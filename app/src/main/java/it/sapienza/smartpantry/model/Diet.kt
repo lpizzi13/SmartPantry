@@ -28,7 +28,6 @@ data class Diet(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val days: List<DayPlan> = emptyList(),
-    val isEditable: Boolean = false,
     val expandedDayIndices: Set<Int> = emptySet(),
     val isWeekly: Boolean = false,
     val isFavorite: Boolean = false
@@ -41,7 +40,7 @@ object DietDefaults {
     ).map { DayPlan(it) }
 
     fun initialDiets(): List<Diet> = listOf(
-        Diet(name = NEW_DIET_NAME, isEditable = true, isWeekly = false)
+        Diet(name = NEW_DIET_NAME, isWeekly = false)
     )
 }
 
@@ -103,8 +102,8 @@ class DietViewModel : ViewModel() {
     private fun normalizeDiets(remoteDiets: List<Diet>): List<Diet> {
         if (remoteDiets.isEmpty()) return DietDefaults.initialDiets()
         val normalized = remoteDiets.toMutableList()
-        if (!normalized.any { it.name == DietDefaults.NEW_DIET_NAME && it.isEditable }) {
-            normalized.add(Diet(name = DietDefaults.NEW_DIET_NAME, isEditable = true, isWeekly = false))
+        if (!normalized.any { it.name == DietDefaults.NEW_DIET_NAME}) {
+            normalized.add(Diet(name = DietDefaults.NEW_DIET_NAME, isWeekly = false))
         }
         return normalized
     }
@@ -134,7 +133,7 @@ class DietViewModel : ViewModel() {
     }
 
     fun onDayClicked(dietId: String, dayIndex: Int) {
-        _uiState.update { state ->
+        updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
                     val newIndices = if (diet.expandedDayIndices.contains(dayIndex)) {
@@ -157,7 +156,7 @@ class DietViewModel : ViewModel() {
             if (dietToUpdate?.name == DietDefaults.NEW_DIET_NAME && trimmedName != DietDefaults.NEW_DIET_NAME) {
                 val newDiet = dietToUpdate.copy(name = trimmedName)
                 val newDiets = state.diets.map { if (it.id == dietId) newDiet else it } +
-                        Diet(name = DietDefaults.NEW_DIET_NAME, isEditable = true, isWeekly = false)
+                        Diet(name = DietDefaults.NEW_DIET_NAME, isWeekly = false)
                 state.copy(diets = newDiets, selectedDietId = newDiet.id)
             } else {
                 val updatedDiets = state.diets.map { if (it.id == dietId) it.copy(name = trimmedName) else it }

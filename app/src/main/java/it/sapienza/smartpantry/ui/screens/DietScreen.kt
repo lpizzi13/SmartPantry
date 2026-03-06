@@ -117,23 +117,19 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                                 dietViewModel.onDietSelected(diet.id)
                                 menuExpanded = false
                             },
-                            trailingIcon = if (diet.isEditable) {
-                                {
-                                    IconButton(
-                                        onClick = {
-                                            renameDraft = diet.name
-                                            renameDialogOpen = diet
-                                            menuExpanded = false
-                                        }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Edit,
-                                            contentDescription = "Rename diet"
-                                        )
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = {
+                                        renameDraft = diet.name
+                                        renameDialogOpen = diet
+                                        menuExpanded = false
                                     }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = "Rename diet"
+                                    )
                                 }
-                            } else {
-                                null
                             }
                         )
                     }
@@ -154,25 +150,23 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 
                     Spacer(modifier = Modifier.width(4.dp))
 
-                    // Switch per convertire in Weekly Diet (visibile solo se la dieta è modificabile)
-                    if (diet.isEditable) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Weekly", style = MaterialTheme.typography.labelMedium)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Switch(
-                                checked = diet.isWeekly,
-                                onCheckedChange = { isChecked ->
-                                    // Mostra il warning solo se ci sono alimenti inseriti
-                                    val hasFoods = diet.days.any { it.foods.isNotEmpty() }
-                                    if (hasFoods) {
-                                        pendingWeeklyToggle = isChecked
-                                        showWeeklyWarning = true
-                                    } else {
-                                        dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
-                                    }
+                    // Switch per convertire in Weekly Diet
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Weekly", style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = diet.isWeekly,
+                            onCheckedChange = { isChecked ->
+                                // Mostra il warning solo se ci sono alimenti inseriti
+                                val hasFoods = diet.days.any { it.foods.isNotEmpty() }
+                                if (hasFoods) {
+                                    pendingWeeklyToggle = isChecked
+                                    showWeeklyWarning = true
+                                } else {
+                                    dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
                                 }
-                            )
-                        }
+                            }
+                        )
                     }
                 }
             }

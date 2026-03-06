@@ -15,9 +15,10 @@ data class User(
     @SerializedName("uid") val uid: String = "",
     @SerializedName("email") val email: String = "",
     @SerializedName("name") val name: String = "",
+    @SerializedName("profile_image_url") val profileImageUrl: String = "",
+    @SerializedName("manualOverride") val manualOverride: Boolean = false,
     @SerializedName("biometrics") val biometrics: Biometrics = Biometrics(),
-    @SerializedName("goals") val goals: Goals = Goals(),
-    @SerializedName("firstLogin") val firstLogin: Boolean = false
+    @SerializedName("goals") val goals: Goals = Goals()
 ) : Parcelable
 
 @Parcelize
@@ -32,7 +33,8 @@ data class Biometrics(
 @Parcelize
 data class Goals(
     @SerializedName("dailyKcal") var dailyKcal: Int = 0,
-    @SerializedName("macrosTarget") var macrosTarget: Map<String, Int> = emptyMap()
+    @SerializedName("macrosTarget") var macrosTarget: Map<String, Int> = emptyMap(),
+    @SerializedName("fitnessGoal") var fitnessGoal: String = "Maintenance"
 ) : Parcelable
 
 data class UserRequest(

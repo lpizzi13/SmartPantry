@@ -4,7 +4,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitClient {
     //private const val BASE_URL = "http://192.168.1.74:5001/"
-    private const val BASE_URL = "http://10.55.8.23:5001/"
+    private const val BASE_URL = "http://192.168.1.68:5001/"
 
     val instance: SmartPantryApi by lazy {
         val retrofit = Retrofit.Builder()
