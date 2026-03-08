@@ -4,7 +4,7 @@ import it.sapienza.smartpantry.model.*
 import retrofit2.Call
 import retrofit2.http.*
 
-interface ApiService {
+interface SmartPantryApi {
     @POST("user/login")
     fun getUserData(@Body request: UserRequest): Call<UserResponse>
 
@@ -28,9 +28,6 @@ interface ApiService {
     @PATCH("pantry/quantity")
     fun updateItemQuantity(@Body request: PantryQuantityRequest): Call<Unit>
 
-    @PATCH("pantry/item")
-    fun updatePantryItem(@Body request: PantryItemUpdateRequest): Call<Unit>
-
     @GET("pantry/{uid}")
     fun getPantry(@Path("uid") uid: String): Call<PantryResponse>
 }
@@ -38,29 +35,25 @@ interface ApiService {
 data class PantryAddRequest(
     val uid: String,
     val openFoodFactsId: String? = null,
-    val productName: String,
+    val productName: String? = null,
     val quantity: Int,
-    val kcal: Double,
-    val prot: Double,
-    val fat: Double,
-    val carbs: Double,
+    val nutrients: PantryAddNutrients? = null,
     val packageWeightGrams: Double? = null
+) {
+    init {
+        require(quantity >= 1) { "quantity must be >= 1." }
+    }
+}
+
+data class PantryAddNutrients(
+    val kcal: Double = 0.0,
+    val carbs: Double = 0.0,
+    val fat: Double = 0.0,
+    val protein: Double = 0.0
 )
 
 data class PantryQuantityRequest(
     val uid: String,
     val openFoodFactsId: String,
     val quantity: Int
-)
-
-data class PantryItemUpdateRequest(
-    val uid: String,
-    val openFoodFactsId: String,
-    val productName: String? = null,
-    val quantity: Int? = null,
-    val kcal: Double? = null,
-    val prot: Double? = null,
-    val fat: Double? = null,
-    val carbs: Double? = null,
-    val packageWeightGrams: Double? = null
 )

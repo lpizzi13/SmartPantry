@@ -18,9 +18,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.auth.FirebaseAuth
-import it.sapienza.smartpantry.data.repository.UserRepository
 import it.sapienza.smartpantry.model.User
+import it.sapienza.smartpantry.model.UserRequest
 import it.sapienza.smartpantry.model.UserResponse
+import it.sapienza.smartpantry.service.RetrofitClient
+import it.sapienza.smartpantry.service.SmartPantryApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -39,7 +41,7 @@ data class LoginUiState(
 )
 
 class LoginViewModel(
-    private val userRepository: UserRepository = UserRepository(),
+    private val api: SmartPantryApi = RetrofitClient.instance,
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) : ViewModel() {
 
@@ -77,7 +79,7 @@ class LoginViewModel(
 
     private fun syncWithBackend(uid: String, email: String) {
         _uiState.update { it.copy(isLoading = true) }
-        userRepository.getUserData(uid, email, object : Callback<UserResponse> {
+        api.getUserData(UserRequest(uid, email)).enqueue(object : Callback<UserResponse> {
             override fun onResponse(call: Call<UserResponse>, response: Response<UserResponse>) {
                 _uiState.update { it.copy(isLoading = false) }
                 if (response.isSuccessful) {

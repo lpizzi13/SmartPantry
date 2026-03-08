@@ -91,7 +91,7 @@ class SearchFoodActivity : ComponentActivity() {
 @Composable
 private fun SearchFoodActivityContent(
     uid: String,
-    onClose: (() -> Unit)? = null,
+    onClose: () -> Unit,
     pantryViewModel: PantryViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -133,10 +133,8 @@ private fun SearchFoodActivityContent(
             TopAppBar(
                 title = { Text("Search food") },
                 navigationIcon = {
-                    if (onClose != null) {
-                        IconButton(onClick = onClose) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                        }
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
             )

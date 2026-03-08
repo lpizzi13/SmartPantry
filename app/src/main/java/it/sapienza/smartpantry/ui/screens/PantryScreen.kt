@@ -1,7 +1,6 @@
 package it.sapienza.smartpantry.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,38 +13,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,26 +42,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import it.sapienza.smartpantry.data.repository.PantryRepository
-import it.sapienza.smartpantry.model.OpenFoodFactsProduct
-import it.sapienza.smartpantry.model.PantryItem
-import it.sapienza.smartpantry.model.resolvedCarbs
-import it.sapienza.smartpantry.model.resolvedFat
-import it.sapienza.smartpantry.model.resolvedKcal
-import it.sapienza.smartpantry.model.resolvedPackageWeightGrams
-import it.sapienza.smartpantry.model.resolvedProt
+import it.sapienza.smartpantry.model.*
+import it.sapienza.smartpantry.service.PantryAddNutrients
+import it.sapienza.smartpantry.service.PantryAddRequest
+import it.sapienza.smartpantry.service.PantryQuantityRequest
+import it.sapienza.smartpantry.service.RetrofitClient
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -84,14 +65,50 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import kotlin.math.abs
+import retrofit2.Response
 
-class PantryViewModel(private val repository: PantryRepository = PantryRepository()) : ViewModel() {
+data class PantryUiState(
+    val searchQuery: String = "",
+    val hasSearched: Boolean = false,
+    val searchResults: List<OpenFoodFactsProduct> = emptyList(),
+    val pantryItems: List<PantryItem> = emptyList(),
+    val isSearching: Boolean = false,
+    val isSaving: Boolean = false,
+    val isScanning: Boolean = false,
+    val isEditorVisible: Boolean = false,
+    val editorNameInput: String = "",
+    val editorQuantityInput: String = "1",
+    val editorKcalInput: String = "0",
+    val editorCarbsInput: String = "0",
+    val editorProtInput: String = "0",
+    val editorFatInput: String = "0",
+    val editorPackageWeightGramsInput: String = "0"
+)
+
+class PantryViewModel : ViewModel() {
+    data class BarcodeResolution(
+        val openFoodFactsId: String? = null,
+        val productName: String? = null,
+        val kcal: Double? = null,
+        val prot: Double? = null,
+        val fat: Double? = null,
+        val carbs: Double? = null,
+        val packageWeightGrams: Double? = null,
+        val errorMessage: String? = null
+    ) {
+        val isSuccess: Boolean
+            get() = errorMessage == null && !openFoodFactsId.isNullOrBlank()
+    }
+
     private sealed interface EditorTarget {
         data class AddWithId(val openFoodFactsId: String) : EditorTarget
         data object AddManual : EditorTarget
-        data class EditExisting(val openFoodFactsId: String) : EditorTarget
     }
 
+    private val api = RetrofitClient.instance
     private val _uiState = MutableStateFlow(PantryUiState())
     val uiState = _uiState.asStateFlow()
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -151,7 +168,7 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         _uiState.update { it.copy(isSearching = true, hasSearched = true) }
         viewModelScope.launch {
             try {
-                val results = repository.searchProducts(
+                val results = searchProductsFromBackend(
                     query = query,
                     similar = true,
                     limit = 15,
@@ -197,19 +214,6 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         )
     }
 
-    fun openEditorFromPantryItem(item: PantryItem) {
-        currentEditorTarget = EditorTarget.EditExisting(item.openFoodFactsId)
-        openEditorWithValues(
-            name = item.productName,
-            quantity = item.quantity,
-            kcal = item.resolvedKcal(),
-            carbs = item.resolvedCarbs(),
-            prot = item.resolvedProt(),
-            fat = item.resolvedFat(),
-            packageWeightGrams = item.resolvedPackageWeightGrams()
-        )
-    }
-
     fun deleteItem(item: PantryItem) {
         if (currentUid.isBlank()) {
             emitEvent("User not authenticated. Please log in again.")
@@ -218,7 +222,7 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
-                val result = repository.updateQuantity(currentUid, item.openFoodFactsId, 0L)
+                val result = updateItemQuantity(currentUid, item.openFoodFactsId, 0L)
                 if (result.isSuccess) {
                     _uiState.update { state ->
                         state.copy(
@@ -268,7 +272,7 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         viewModelScope.launch {
             try {
                 val result = when (target) {
-                    is EditorTarget.AddWithId -> repository.addItem(
+                    is EditorTarget.AddWithId -> addPantryItem(
                         currentUid,
                         target.openFoodFactsId,
                         name,
@@ -279,20 +283,9 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                         carbs,
                         packageWeightGrams
                     )
-                    is EditorTarget.AddManual -> repository.addItem(
+                    is EditorTarget.AddManual -> addPantryItem(
                         currentUid,
                         null,
-                        name,
-                        quantity,
-                        kcal,
-                        prot,
-                        fat,
-                        carbs,
-                        packageWeightGrams
-                    )
-                    is EditorTarget.EditExisting -> repository.updateItem(
-                        currentUid,
-                        target.openFoodFactsId,
                         name,
                         quantity,
                         kcal,
@@ -313,13 +306,7 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
                     }
                     _uiState.update { it.copy(isEditorVisible = false) }
                     currentEditorTarget = null
-                    emitEvent(
-                        if (target is EditorTarget.EditExisting) {
-                            "Pantry item updated."
-                        } else {
-                            "Item added to pantry."
-                        }
-                    )
+                    emitEvent("Item added to pantry.")
                 } else {
                     emitEvent(
                         "Operation failed: ${result.exceptionOrNull()?.localizedMessage ?: "unknown error"}"
@@ -345,7 +332,7 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
         }
         viewModelScope.launch {
             try {
-                val resolution = repository.resolveBarcode(cleanCode)
+                val resolution = resolveBarcodeFromBackend(cleanCode)
                 if (!resolution.isSuccess) {
                     emitEvent(resolution.errorMessage ?: "Barcode lookup failed.")
                     return@launch
@@ -412,7 +399,7 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
     private fun emitEvent(message: String) = _events.tryEmit(message)
 
     private suspend fun refreshPantryFromBackend(uid: String): Result<Unit> {
-        val result = repository.getPantry(uid)
+        val result = loadPantry(uid)
         return if (result.isSuccess) {
             _uiState.update { it.copy(pantryItems = result.getOrNull().orEmpty()) }
             Result.success(Unit)
@@ -420,6 +407,242 @@ class PantryViewModel(private val repository: PantryRepository = PantryRepositor
             Result.failure(
                 IllegalStateException(result.exceptionOrNull()?.localizedMessage ?: "unknown error")
             )
+        }
+    }
+
+    private suspend fun searchProductsFromBackend(
+        query: String,
+        similar: Boolean = true,
+        limit: Int = 15,
+        lang: String = "en"
+    ): List<OpenFoodFactsProduct> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.searchProducts(
+                query = query,
+                similar = similar,
+                limit = limit,
+                lang = lang
+            ).execute()
+            if (response.isSuccessful) {
+                val body = response.body()
+                val ranked = if (similar && !body?.recommended.isNullOrEmpty()) {
+                    body?.recommended.orEmpty()
+                } else {
+                    body?.products.orEmpty()
+                }
+
+                ranked
+                    .filter { !it.code.isNullOrBlank() }
+                    .distinctBy { it.code }
+                    .take(limit)
+            } else {
+                emptyList()
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun resolveBarcodeFromBackend(barcode: String): BarcodeResolution = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getProductByBarcode(barcode).execute()
+            if (response.isSuccessful) {
+                return@withContext parseBarcodeSuccess(response.body(), barcode)
+            }
+
+            return@withContext when {
+                response.code() == 404 -> BarcodeResolution(
+                    errorMessage = "Product not found on OpenFoodFacts."
+                )
+                response.code() == 502 || response.code() >= 500 -> BarcodeResolution(
+                    errorMessage = "OpenFoodFacts is temporarily unavailable."
+                )
+                else -> BarcodeResolution(
+                    errorMessage = parseBackendError(response, "Barcode lookup failed.")
+                )
+            }
+        } catch (_: Exception) {
+            BarcodeResolution(errorMessage = "Barcode lookup failed.")
+        }
+    }
+
+    private suspend fun loadPantry(uid: String): Result<List<PantryItem>> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getPantry(uid).execute()
+            if (response.isSuccessful) {
+                Result.success(response.body()?.items.orEmpty())
+            } else {
+                Result.failure(
+                    IllegalStateException(
+                        parseBackendError(response, "Unable to load pantry.")
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            Result.failure(IllegalStateException("Unable to load pantry."))
+        }
+    }
+
+    private suspend fun addPantryItem(
+        uid: String,
+        openFoodFactsId: String?,
+        productName: String,
+        quantity: Long,
+        kcal: Double,
+        prot: Double,
+        fat: Double,
+        carbs: Double,
+        packageWeightGrams: Double?
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val quantityValue = quantity.toIntOrNullChecked()
+            ?: return@withContext Result.failure(
+                IllegalArgumentException("Quantity must be greater than 0.")
+            )
+
+        try {
+            val normalizedRequest = normalizeAddPayload(
+                uid = uid,
+                openFoodFactsId = openFoodFactsId,
+                productName = productName,
+                quantity = quantityValue,
+                kcal = kcal,
+                prot = prot,
+                fat = fat,
+                carbs = carbs,
+                packageWeightGrams = packageWeightGrams
+            )
+
+            val response = api.addToPantry(
+                normalizedRequest
+            ).execute()
+
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(
+                    IllegalStateException(parseBackendError(response, "Unable to add item."))
+                )
+            }
+        } catch (_: Exception) {
+            Result.failure(IllegalStateException("Unable to add item."))
+        }
+    }
+
+    private suspend fun updateItemQuantity(
+        uid: String,
+        openFoodFactsId: String,
+        quantity: Long
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val quantityValue = quantity.toIntOrNullChecked(allowZero = true)
+            ?: return@withContext Result.failure(
+                IllegalArgumentException("Quantity must be 0 or greater.")
+            )
+
+        try {
+            val response = api.updateItemQuantity(
+                PantryQuantityRequest(
+                    uid = uid,
+                    openFoodFactsId = openFoodFactsId,
+                    quantity = quantityValue
+                )
+            ).execute()
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(
+                    IllegalStateException(parseBackendError(response, "Unable to update quantity."))
+                )
+            }
+        } catch (_: Exception) {
+            Result.failure(IllegalStateException("Unable to update quantity."))
+        }
+    }
+
+    private fun parseBarcodeSuccess(
+        body: OpenFoodFactsProductResponse?,
+        fallbackBarcode: String
+    ): BarcodeResolution {
+        val product = body?.product
+        val resolvedId = product?.code?.trim().orEmpty().ifBlank { fallbackBarcode }
+        val resolvedName = product?.productName?.trim().orEmpty().ifBlank { "Unnamed product" }
+        val resolvedKcal = product?.resolvedKcal()
+        val resolvedProt = product?.resolvedProt()
+        val resolvedFat = product?.resolvedFat()
+        val resolvedCarbs = product?.resolvedCarbs()
+        val resolvedPackageWeightGrams = product?.resolvedPackageWeightGrams()
+
+        return if (body?.status == 1 && resolvedId.isNotBlank()) {
+            BarcodeResolution(
+                openFoodFactsId = resolvedId,
+                productName = resolvedName,
+                kcal = resolvedKcal,
+                prot = resolvedProt,
+                fat = resolvedFat,
+                carbs = resolvedCarbs,
+                packageWeightGrams = resolvedPackageWeightGrams
+            )
+        } else {
+            BarcodeResolution(errorMessage = "Product not found on OpenFoodFacts.")
+        }
+    }
+
+    private fun parseBackendError(response: Response<*>, fallback: String): String {
+        return try {
+            val raw = response.errorBody()?.string().orEmpty()
+            if (raw.isBlank()) return fallback
+            val json = JSONObject(raw)
+            val errorText = json.optString("error")
+            val messageText = json.optString("message")
+            when {
+                errorText.isNotBlank() -> errorText
+                messageText.isNotBlank() -> messageText
+                else -> fallback
+            }
+        } catch (_: Exception) {
+            fallback
+        }
+    }
+
+    private fun normalizeAddPayload(
+        uid: String,
+        openFoodFactsId: String?,
+        productName: String,
+        quantity: Int,
+        kcal: Double,
+        prot: Double,
+        fat: Double,
+        carbs: Double,
+        packageWeightGrams: Double?
+    ): PantryAddRequest {
+        val normalizedName = productName.trim().ifBlank { "Unnamed product" }
+        val normalizedNutrients = PantryAddNutrients(
+            kcal = sanitizeMacro(kcal),
+            carbs = sanitizeMacro(carbs),
+            fat = sanitizeMacro(fat),
+            protein = sanitizeMacro(prot)
+        )
+
+        return PantryAddRequest(
+            uid = uid,
+            openFoodFactsId = openFoodFactsId?.takeIf { it.isNotBlank() },
+            productName = normalizedName,
+            quantity = quantity,
+            nutrients = normalizedNutrients,
+            packageWeightGrams = sanitizeMacro(packageWeightGrams ?: 0.0)
+        )
+    }
+
+    private fun sanitizeMacro(value: Double): Double {
+        return if (value.isFinite() && value >= 0.0) value else 0.0
+    }
+
+    private fun Long.toIntOrNullChecked(allowZero: Boolean = false): Int? {
+        if (this < Int.MIN_VALUE.toLong() || this > Int.MAX_VALUE.toLong()) return null
+        val intValue = this.toInt()
+        return if (allowZero) {
+            intValue.takeIf { it >= 0 }
+        } else {
+            intValue.takeIf { it > 0 }
         }
     }
 }
@@ -433,26 +656,13 @@ fun PantryScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by pantryViewModel.uiState.collectAsState()
-    var pantryFilterQuery by rememberSaveable { mutableStateOf("") }
-    var selectedSortFieldName by rememberSaveable { mutableStateOf(PantrySortField.NAME.name) }
-    var isSortAscending by rememberSaveable { mutableStateOf(true) }
-    var isSortMenuExpanded by remember { mutableStateOf(false) }
     var pendingDeletionItem by remember { mutableStateOf<PantryItem?>(null) }
-    val pantryListState = rememberLazyListState()
-    val selectedSortField = PantrySortField.valueOf(selectedSortFieldName)
-    val visiblePantryItems = remember(
-        uiState.pantryItems,
-        pantryFilterQuery,
-        selectedSortFieldName,
-        isSortAscending
-    ) {
-        val query = pantryFilterQuery.trim()
-        val filtered = if (query.isBlank()) {
-            uiState.pantryItems
-        } else {
-            uiState.pantryItems.filter { item -> item.productName.contains(query, ignoreCase = true) }
-        }
-        sortPantryItems(filtered, selectedSortField, isSortAscending)
+    var isProteinExpanded by rememberSaveable { mutableStateOf(false) }
+    var isCarbsExpanded by rememberSaveable { mutableStateOf(false) }
+    var isFatExpanded by rememberSaveable { mutableStateOf(false) }
+    var isOtherExpanded by rememberSaveable { mutableStateOf(false) }
+    val categorizedItems = remember(uiState.pantryItems) {
+        groupPantryItemsByCategory(uiState.pantryItems)
     }
 
     LaunchedEffect(uid) {
@@ -463,12 +673,6 @@ fun PantryScreen(
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
-    LaunchedEffect(selectedSortFieldName, isSortAscending) {
-        if (visiblePantryItems.isNotEmpty()) {
-            pantryListState.scrollToItem(0)
-        }
-    }
-
     DisposableEffect(lifecycleOwner, uid) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && uid.isNotBlank()) {
@@ -504,69 +708,12 @@ fun PantryScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            OutlinedTextField(
-                value = pantryFilterQuery,
-                onValueChange = { pantryFilterQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Search pantry items") }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${visiblePantryItems.size} items",
+                    "${uiState.pantryItems.size} items",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Box {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Sort: ${selectedSortField.label}",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier
-                                .clickable { isSortMenuExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 8.dp)
-                        )
-                        IconButton(
-                            onClick = { isSortAscending = !isSortAscending },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isSortAscending) {
-                                    Icons.Default.ArrowUpward
-                                } else {
-                                    Icons.Default.ArrowDownward
-                                },
-                                contentDescription = if (isSortAscending) {
-                                    "Ascending"
-                                } else {
-                                    "Descending"
-                                }
-                            )
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = isSortMenuExpanded,
-                        onDismissRequest = { isSortMenuExpanded = false }
-                    ) {
-                        PantrySortField.entries.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label) },
-                                onClick = {
-                                    selectedSortFieldName = option.name
-                                    isSortMenuExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -575,27 +722,60 @@ fun PantryScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Your pantry is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-            } else if (visiblePantryItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No pantry items match your search.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             } else {
                 LazyColumn(
-                    state = pantryListState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(visiblePantryItems, key = { it.openFoodFactsId }) { item ->
-                        PantrySwipeToDeleteItem(
-                            item = item,
-                            isSaving = uiState.isSaving,
-                            onEdit = { pantryViewModel.openEditorFromPantryItem(item) },
-                            onDeleteRequested = { pendingDeletionItem = item }
-                        )
+                    PantryCategory.entries.forEach { category ->
+                        val sectionItems = categorizedItems[category].orEmpty()
+                        val isExpanded = when (category) {
+                            PantryCategory.PROTEIN -> isProteinExpanded
+                            PantryCategory.CARBS -> isCarbsExpanded
+                            PantryCategory.FAT -> isFatExpanded
+                            PantryCategory.OTHER -> isOtherExpanded
+                        }
+
+                        item(key = "header_${category.name}") {
+                            PantryCategoryHeader(
+                                category = category,
+                                itemCount = sectionItems.size,
+                                isExpanded = isExpanded,
+                                onToggleExpanded = {
+                                    when (category) {
+                                        PantryCategory.PROTEIN -> isProteinExpanded = !isProteinExpanded
+                                        PantryCategory.CARBS -> isCarbsExpanded = !isCarbsExpanded
+                                        PantryCategory.FAT -> isFatExpanded = !isFatExpanded
+                                        PantryCategory.OTHER -> isOtherExpanded = !isOtherExpanded
+                                    }
+                                }
+                            )
+                        }
+
+                        if (isExpanded) {
+                            if (sectionItems.isEmpty()) {
+                                item(key = "empty_${category.name}") {
+                                    Text(
+                                        text = "No items in this category.",
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                items(
+                                    sectionItems,
+                                    key = { "${category.name}_${it.openFoodFactsId}" }
+                                ) { item ->
+                                    PantryItemCard(
+                                        item = item,
+                                        isSaving = uiState.isSaving,
+                                        onDeleteRequested = { pendingDeletionItem = item }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -631,74 +811,54 @@ fun PantryScreen(
         )
     }
 
-    if (uiState.isEditorVisible) {
-        FoodEditorDialog(
-            state = uiState,
-            isSaving = uiState.isSaving,
-            onDismiss = pantryViewModel::dismissEditor,
-            onNameChange = pantryViewModel::onEditorNameChange,
-            onQuantityChange = pantryViewModel::onEditorQuantityChange,
-            onKcalChange = pantryViewModel::onEditorKcalChange,
-            onCarbsChange = pantryViewModel::onEditorCarbsChange,
-            onProtChange = pantryViewModel::onEditorProtChange,
-            onFatChange = pantryViewModel::onEditorFatChange,
-            onPackageWeightGramsChange = pantryViewModel::onEditorPackageWeightGramsChange,
-            onSave = pantryViewModel::saveEditor
-        )
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PantrySwipeToDeleteItem(
-    item: PantryItem,
-    isSaving: Boolean,
-    onEdit: () -> Unit,
-    onDeleteRequested: () -> Unit
-) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { targetValue ->
-            if (targetValue == SwipeToDismissBoxValue.EndToStart && !isSaving) {
-                onDeleteRequested()
-            }
-            false
-        }
-    )
+private enum class PantryCategory(val label: String) {
+    PROTEIN("Protein"),
+    CARBS("Carbs"),
+    FAT("Fat"),
+    OTHER("Other")
+}
 
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        backgroundContent = {
-            val isActive = dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart
-            val backgroundColor = if (isActive) {
-                MaterialTheme.colorScheme.errorContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(backgroundColor)
-                    .padding(horizontal = 16.dp, vertical = 18.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Spacer(modifier = Modifier.size(6.dp))
-                Text(
-                    "Delete",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-            }
-        }
+@Composable
+private fun PantryCategoryHeader(
+    category: PantryCategory,
+    itemCount: Int,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggleExpanded),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        PantryItemCard(item = item, isSaving = isSaving, onEdit = onEdit)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${category.label} ($itemCount)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (isExpanded) {
+                    Icons.Default.KeyboardArrowUp
+                } else {
+                    Icons.Default.KeyboardArrowDown
+                },
+                contentDescription = if (isExpanded) {
+                    "Collapse ${category.label}"
+                } else {
+                    "Expand ${category.label}"
+                }
+            )
+        }
     }
 }
 
@@ -706,7 +866,7 @@ private fun PantrySwipeToDeleteItem(
 private fun PantryItemCard(
     item: PantryItem,
     isSaving: Boolean,
-    onEdit: () -> Unit
+    onDeleteRequested: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -716,7 +876,6 @@ private fun PantryItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = !isSaving, onClick = onEdit)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.Top
         ) {
@@ -739,103 +898,15 @@ private fun PantryItemCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = onEdit, enabled = !isSaving, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit item")
+            IconButton(
+                onClick = onDeleteRequested,
+                enabled = !isSaving,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = "Remove item")
             }
         }
     }
-}
-
-@Composable
-private fun FoodEditorDialog(
-    state: PantryUiState,
-    isSaving: Boolean,
-    onDismiss: () -> Unit,
-    onNameChange: (String) -> Unit,
-    onQuantityChange: (String) -> Unit,
-    onKcalChange: (String) -> Unit,
-    onCarbsChange: (String) -> Unit,
-    onProtChange: (String) -> Unit,
-    onFatChange: (String) -> Unit,
-    onPackageWeightGramsChange: (String) -> Unit,
-    onSave: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text("Food details") },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = state.editorNameInput,
-                    onValueChange = onNameChange,
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = state.editorQuantityInput,
-                    onValueChange = onQuantityChange,
-                    label = { Text("Quantity") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                OutlinedTextField(
-                    value = state.editorKcalInput,
-                    onValueChange = onKcalChange,
-                    label = { Text("Kcal") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                OutlinedTextField(
-                    value = state.editorCarbsInput,
-                    onValueChange = onCarbsChange,
-                    label = { Text("Carbs") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                OutlinedTextField(
-                    value = state.editorProtInput,
-                    onValueChange = onProtChange,
-                    label = { Text("Protein") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                OutlinedTextField(
-                    value = state.editorFatInput,
-                    onValueChange = onFatChange,
-                    label = { Text("Fat") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                OutlinedTextField(
-                    value = state.editorPackageWeightGramsInput,
-                    onValueChange = onPackageWeightGramsChange,
-                    label = { Text("Weight package (g)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onSave, enabled = !isSaving) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
-                Text("Cancel")
-            }
-        }
-    )
 }
 
 private fun displayName(product: OpenFoodFactsProduct): String {
@@ -849,26 +920,32 @@ private fun formatDecimalInput(value: Double?): String {
     else String.format(Locale.US, "%.2f", safe).trimEnd('0').trimEnd('.')
 }
 
-private enum class PantrySortField(val label: String) {
-    NAME("Name"),
-    KCAL("kcal"),
-    CARBS("carbs"),
-    PROTEIN("protein"),
-    FAT("fat")
+private fun groupPantryItemsByCategory(items: List<PantryItem>): Map<PantryCategory, List<PantryItem>> {
+    val grouped = items.groupBy(::classifyPantryItem)
+    return PantryCategory.entries.associateWith { category ->
+        grouped[category].orEmpty()
+    }
 }
 
-private fun sortPantryItems(
-    items: List<PantryItem>,
-    field: PantrySortField,
-    ascending: Boolean
-): List<PantryItem> {
-    val sorted = when (field) {
-        PantrySortField.NAME -> items.sortedBy { it.productName.trim().lowercase(Locale.US) }
-        PantrySortField.KCAL -> items.sortedBy { it.resolvedKcal() ?: 0.0 }
-        PantrySortField.CARBS -> items.sortedBy { it.resolvedCarbs() ?: 0.0 }
-        PantrySortField.PROTEIN -> items.sortedBy { it.resolvedProt() ?: 0.0 }
-        PantrySortField.FAT -> items.sortedBy { it.resolvedFat() ?: 0.0 }
+private fun classifyPantryItem(item: PantryItem): PantryCategory {
+    val protein = item.resolvedProt() ?: 0.0
+    val carbs = item.resolvedCarbs() ?: 0.0
+    val fat = item.resolvedFat() ?: 0.0
+    val maxMacro = maxOf(protein, carbs, fat)
+
+    if (maxMacro <= 0.0) return PantryCategory.OTHER
+
+    val isProteinTop = abs(protein - maxMacro) < 1e-9
+    val isCarbsTop = abs(carbs - maxMacro) < 1e-9
+    val isFatTop = abs(fat - maxMacro) < 1e-9
+    val topCount = listOf(isProteinTop, isCarbsTop, isFatTop).count { it }
+    if (topCount != 1) return PantryCategory.OTHER
+
+    return when {
+        isProteinTop -> PantryCategory.PROTEIN
+        isCarbsTop -> PantryCategory.CARBS
+        isFatTop -> PantryCategory.FAT
+        else -> PantryCategory.OTHER
     }
-    return if (ascending) sorted else sorted.asReversed()
 }
 

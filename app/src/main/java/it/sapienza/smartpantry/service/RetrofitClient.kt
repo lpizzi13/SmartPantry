@@ -6,12 +6,12 @@ import retrofit2.converter.gson.GsonConverterFactory
 object RetrofitClient {
     private const val BASE_URL = "http://192.168.1.242:5001/" // Indirizzo di default per localhost da emulatore Android
 
-    val instance: ApiService by lazy {
+    val instance: SmartPantryApi by lazy {
         val retrofit = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
-        retrofit.create(ApiService::class.java)
+        retrofit.create(SmartPantryApi::class.java)
     }
 }

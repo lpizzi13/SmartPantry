@@ -31,9 +31,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
-import it.sapienza.smartpantry.data.repository.UserRepository
 import it.sapienza.smartpantry.model.UpdateUserResponse
 import it.sapienza.smartpantry.model.User
+import it.sapienza.smartpantry.service.RetrofitClient
+import it.sapienza.smartpantry.service.SmartPantryApi
 import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.SearchFoodActivity
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +44,7 @@ import retrofit2.Callback
 import retrofit2.Response
 
 class ProfileViewModel(
-    private val userRepository: UserRepository = UserRepository()
+    private val api: SmartPantryApi = RetrofitClient.instance
 ) : ViewModel() {
 
     private val _user = MutableStateFlow(User())
@@ -54,7 +55,7 @@ class ProfileViewModel(
     }
 
     fun updateUser(updatedUser: User) {
-        userRepository.updateUser(updatedUser, object : Callback<UpdateUserResponse> {
+        api.updateUser(updatedUser).enqueue(object : Callback<UpdateUserResponse> {
             override fun onResponse(call: Call<UpdateUserResponse>, response: Response<UpdateUserResponse>) {
                 if (response.isSuccessful) {
                     val body = response.body()
