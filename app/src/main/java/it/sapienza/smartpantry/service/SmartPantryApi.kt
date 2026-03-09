@@ -1,15 +1,17 @@
 package it.sapienza.smartpantry.service
-
 import it.sapienza.smartpantry.model.*
 import retrofit2.Call
 import retrofit2.http.*
 
 interface SmartPantryApi {
-    @POST("user/login")
+    @POST("get-user-data")
     fun getUserData(@Body request: UserRequest): Call<UserResponse>
 
-    @POST("user/update")
+    @POST("update-user")
     fun updateUser(@Body user: User): Call<UpdateUserResponse>
+
+    @POST("register-user")
+    fun registerUser(@Body request: RegisterRequest): Call<UserResponse>
 
     @GET("pantry/search")
     fun searchProducts(
