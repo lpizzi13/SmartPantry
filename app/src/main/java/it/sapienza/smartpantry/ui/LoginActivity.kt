@@ -58,39 +58,58 @@ class LoginActivity : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
     private var errorMessage by mutableStateOf<String?>(null)
     private var successMessage by mutableStateOf<String?>(null)
+    private var isLoadingSession by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         auth = FirebaseAuth.getInstance()
 
+        // Check if user is already logged in before setting content
+        if (auth.currentUser != null) {
+            syncWithBackend(auth.currentUser!!.uid, auth.currentUser!!.email ?: "")
+        } else {
+            isLoadingSession = false
+        }
+
         setContent {
             SmartPantryTheme {
-                val navController = rememberNavController()
-                var showForgotDialog by remember { mutableStateOf(false) }
+                if (isLoadingSession) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    val navController = rememberNavController()
+                    var showForgotDialog by remember { mutableStateOf(false) }
 
-                NavHost(navController = navController, startDestination = "login") {
-                    composable("login") {
-                        LoginScreen(
-                            onLoginClick = { email, password -> loginUser(email, password) },
-                            onRegisterClick = { navController.navigate("signup") },
-                            onForgotPasswordClick = { showForgotDialog = true }
+                    NavHost(navController = navController, startDestination = "login") {
+                        composable("login") {
+                            LoginScreen(
+                                onLoginClick = { email, password -> loginUser(email, password) },
+                                onRegisterClick = { navController.navigate("signup") },
+                                onForgotPasswordClick = { showForgotDialog = true }
+                            )
+                        }
+                        composable("signup") {
+                            SignUpScreen(
+                                onSignUpClick = { request -> performSignUp(request) },
+                                onLoginClick = { navController.popBackStack() },
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                    }
+
+                    if (showForgotDialog) {
+                        ForgotPasswordDialog(
+                            onDismiss = { showForgotDialog = false },
+                            onSendClick = { email -> resetPassword(email) }
                         )
                     }
-                    composable("signup") {
-                        SignUpScreen(
-                            onSignUpClick = { request -> performSignUp(request) },
-                            onLoginClick = { navController.popBackStack() },
-                            onBackClick = { navController.popBackStack() }
-                        )
-                    }
-                }
-
-                if (showForgotDialog) {
-                    ForgotPasswordDialog(
-                        onDismiss = { showForgotDialog = false },
-                        onSendClick = { email -> resetPassword(email) }
-                    )
                 }
 
                 if (errorMessage != null) {
@@ -125,13 +144,6 @@ class LoginActivity : ComponentActivity() {
                     )
                 }
             }
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        if (auth.currentUser != null) {
-            syncWithBackend(auth.currentUser!!.uid, auth.currentUser!!.email ?: "")
         }
     }
 
@@ -195,6 +207,7 @@ class LoginActivity : ComponentActivity() {
                 if (response.isSuccessful) {
                     navigateToMain(response.body()?.userData)
                 } else {
+                    // Fallback to minimal user if backend sync fails
                     navigateToMain(User(uid = uid, email = email))
                 }
             }
