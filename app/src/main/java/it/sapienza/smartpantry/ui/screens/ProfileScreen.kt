@@ -37,12 +37,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.google.firebase.storage.FirebaseStorage
+import it.sapienza.smartpantry.model.Biometrics
+import it.sapienza.smartpantry.model.Goals
 import it.sapienza.smartpantry.model.UpdateUserResponse
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.service.RetrofitClient
@@ -121,41 +124,63 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
 
             // --- Avatar with Glow Effect ---
             Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .padding(4.dp)
-                    .shadow(12.dp, CircleShape, ambientColor = neonGreen, spotColor = neonGreen)
-                    .border(2.dp, neonGreen, CircleShape)
-                    .clickable(enabled = isEditing) { galleryLauncher.launch("image/*") },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.BottomEnd,
+                modifier = Modifier.size(100.dp)
             ) {
-                val context = LocalContext.current
-                val model = remember(selectedImageUri, user.profileImageUrl) {
-                    if (selectedImageUri != null) {
-                        selectedImageUri
-                    } else if (user.profileImageUrl.isNotEmpty()) {
-                        ImageRequest.Builder(context)
-                            .data(user.profileImageUrl)
-                            .crossfade(true)
-                            .diskCachePolicy(CachePolicy.ENABLED)
-                            .memoryCachePolicy(CachePolicy.ENABLED)
-                            .build()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp)
+                        .shadow(12.dp, CircleShape, ambientColor = neonGreen, spotColor = neonGreen)
+                        .border(2.dp, neonGreen, CircleShape)
+                        .clickable(enabled = isEditing) { galleryLauncher.launch("image/*") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val context = LocalContext.current
+                    val model = remember(selectedImageUri, user.profileImageUrl) {
+                        if (selectedImageUri != null) {
+                            selectedImageUri
+                        } else if (user.profileImageUrl.isNotEmpty()) {
+                            ImageRequest.Builder(context)
+                                .data(user.profileImageUrl)
+                                .crossfade(true)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .memoryCachePolicy(CachePolicy.ENABLED)
+                                .build()
+                        } else {
+                            null
+                        }
+                    }
+
+                    if (model != null) {
+                        AsyncImage(
+                            model = model,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
                     } else {
-                        null
+                        Icon(imageVector = if (isEditing) Icons.Default.AddAPhoto else Icons.Default.Person, contentDescription = null, modifier = Modifier.size(45.dp), tint = Color.Gray)
                     }
                 }
 
-                if (model != null) {
-                    AsyncImage(
-                        model = model,
-                        contentDescription = null,
+                if (isEditing) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(imageVector = if (isEditing) Icons.Default.AddAPhoto else Icons.Default.Person, contentDescription = null, modifier = Modifier.size(45.dp), tint = Color.Gray)
+                            .size(28.dp)
+                            .background(neonGreen, CircleShape)
+                            .border(2.dp, darkBg, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = Color.Black
+                        )
+                    }
                 }
             }
 
@@ -259,7 +284,7 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
                 Text(text = "DAILY TARGETS", color = neonGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 if (isEditing) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Auto-calculate", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                        Text("Auto-calculate", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
                         Spacer(modifier = Modifier.width(6.dp))
                         Switch(
                             checked = autoCalculate,
@@ -353,7 +378,7 @@ fun DisplayStatCard(label: String, value: String, modifier: Modifier = Modifier,
             horizontalArrangement = Arrangement.Start
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(label.uppercase(), color = Color.Gray, fontSize = 10.sp)
+                Text(label.uppercase(), color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
             icon?.let { Icon(it, null, tint = Color(0xFF00E676), modifier = Modifier.size(16.dp)) }
@@ -377,7 +402,7 @@ fun EditStatField(label: String, value: String, modifier: Modifier = Modifier, i
             }
             onValueChange(filtered)
         },
-        label = { Text(text = label, fontSize = 11.sp, maxLines = 1) },
+        label = { Text(text = label.uppercase(), fontSize = 11.sp, maxLines = 1,  fontWeight = FontWeight.Bold) },
         modifier = modifier.height(52.dp),
         textStyle = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium),
         keyboardOptions = KeyboardOptions(keyboardType = if (isDecimal) KeyboardType.Decimal else KeyboardType.Number),
@@ -404,7 +429,7 @@ fun NutritionalCardMockup(user: User, isEditing: Boolean, kcal: String, carbs: S
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Target Calories", color = Color.Gray, fontSize = 11.sp)
+                    Text("TARGET CALORIES", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     if (isEditing && !auto) {
                         OutlinedTextField(
                             value = kcal,
@@ -447,7 +472,7 @@ fun NutritionalCardMockup(user: User, isEditing: Boolean, kcal: String, carbs: S
 @Composable
 fun MacroStatBox(label: String, value: String, isEditing: Boolean, onValueChange: (String) -> Unit) {
     Column(modifier = Modifier.width(80.dp)) {
-        Text(label, color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         if (isEditing) {
             OutlinedTextField(
                 value = value,
@@ -495,7 +520,7 @@ fun DropdownSelectorCompact(
             value = displayText,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, fontSize = 10.sp) },
+            label = { Text(label.uppercase(), fontSize = 11.sp,  fontWeight = FontWeight.Bold) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor()
@@ -550,4 +575,27 @@ fun getActivityLevelLabel(value: String): String = when(value) {
     "1.725" -> "Active"
     "1.9" -> "Very Active"
     else -> value
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF0A120E)
+@Composable
+fun ProfileScreenPreview() {
+    val dummyUser = User(
+        uid = "123",
+        email = "mario.rossi@example.com",
+        name = "Mario Rossi",
+        biometrics = Biometrics(
+            age = 30,
+            gender = "male",
+            height = 180.0,
+            weight = 75.0,
+            activityLevel = "1.55"
+        ),
+        goals = Goals(
+            dailyKcal = 2500,
+            macrosTarget = mapOf("carbs" to 300, "protein" to 150, "fat" to 70),
+            fitnessGoal = "maintenance"
+        )
+    )
+    ProfileScreen(user = dummyUser, onUserUpdate = {})
 }
