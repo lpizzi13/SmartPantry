@@ -1,7 +1,9 @@
 package it.sapienza.smartpantry.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,14 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -657,12 +659,12 @@ fun PantryScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by pantryViewModel.uiState.collectAsState()
     var pendingDeletionItem by remember { mutableStateOf<PantryItem?>(null) }
-    var isProteinExpanded by rememberSaveable { mutableStateOf(false) }
-    var isCarbsExpanded by rememberSaveable { mutableStateOf(false) }
-    var isFatExpanded by rememberSaveable { mutableStateOf(false) }
-    var isOtherExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedCategory by rememberSaveable { mutableStateOf<PantryCategory?>(null) }
     val categorizedItems = remember(uiState.pantryItems) {
         groupPantryItemsByCategory(uiState.pantryItems)
+    }
+    val filteredItems = remember(uiState.pantryItems, selectedCategory) {
+        selectedCategory?.let { category -> categorizedItems[category].orEmpty() } ?: uiState.pantryItems
     }
 
     LaunchedEffect(uid) {
@@ -696,8 +698,13 @@ fun PantryScreen(
     }
 
     Scaffold(
+        containerColor = PantryBackgroundColor,
         floatingActionButton = {
-            FloatingActionButton(onClick = onOpenSearchFood) {
+            FloatingActionButton(
+                onClick = onOpenSearchFood,
+                containerColor = PantryAccentColor,
+                contentColor = Color.Black
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Add item")
             }
         }
@@ -708,74 +715,54 @@ fun PantryScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    "${uiState.pantryItems.size} items",
+                    text = if (selectedCategory == null) {
+                        "${uiState.pantryItems.size} items"
+                    } else {
+                        "${selectedCategory?.label}: ${filteredItems.size} items"
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = PantryTextSecondary
                 )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            PantryCategoryLabels(
+                selectedCategory = selectedCategory,
+                categoryCounts = categorizedItems.mapValues { it.value.size },
+                onCategorySelected = { selectedCategory = it }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             if (uiState.pantryItems.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Your pantry is empty.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Your pantry is empty.", color = PantryTextSecondary)
+                }
+            } else if (filteredItems.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No items in this category.", color = PantryTextSecondary)
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PantryCategory.entries.forEach { category ->
-                        val sectionItems = categorizedItems[category].orEmpty()
-                        val isExpanded = when (category) {
-                            PantryCategory.PROTEIN -> isProteinExpanded
-                            PantryCategory.CARBS -> isCarbsExpanded
-                            PantryCategory.FAT -> isFatExpanded
-                            PantryCategory.OTHER -> isOtherExpanded
-                        }
-
-                        item(key = "header_${category.name}") {
-                            PantryCategoryHeader(
-                                category = category,
-                                itemCount = sectionItems.size,
-                                isExpanded = isExpanded,
-                                onToggleExpanded = {
-                                    when (category) {
-                                        PantryCategory.PROTEIN -> isProteinExpanded = !isProteinExpanded
-                                        PantryCategory.CARBS -> isCarbsExpanded = !isCarbsExpanded
-                                        PantryCategory.FAT -> isFatExpanded = !isFatExpanded
-                                        PantryCategory.OTHER -> isOtherExpanded = !isOtherExpanded
-                                    }
-                                }
-                            )
-                        }
-
-                        if (isExpanded) {
-                            if (sectionItems.isEmpty()) {
-                                item(key = "empty_${category.name}") {
-                                    Text(
-                                        text = "No items in this category.",
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            } else {
-                                items(
-                                    sectionItems,
-                                    key = { "${category.name}_${it.openFoodFactsId}" }
-                                ) { item ->
-                                    PantryItemCard(
-                                        item = item,
-                                        isSaving = uiState.isSaving,
-                                        onDeleteRequested = { pendingDeletionItem = item }
-                                    )
-                                }
-                            }
-                        }
+                    items(
+                        filteredItems,
+                        key = { "${it.openFoodFactsId}_${it.productName}" }
+                    ) { item ->
+                        PantryItemCard(
+                            item = item,
+                            isSaving = uiState.isSaving,
+                            onDeleteRequested = { pendingDeletionItem = item }
+                        )
                     }
                 }
             }
@@ -787,6 +774,9 @@ fun PantryScreen(
             onDismissRequest = {
                 if (!uiState.isSaving) pendingDeletionItem = null
             },
+            containerColor = PantryCardColor,
+            titleContentColor = PantryTextPrimary,
+            textContentColor = PantryTextSecondary,
             title = { Text("Remove item?") },
             text = { Text("Are you sure you want to remove this item from the pantry?") },
             confirmButton = {
@@ -797,7 +787,7 @@ fun PantryScreen(
                     },
                     enabled = !uiState.isSaving
                 ) {
-                    Text("Remove")
+                    Text("Remove", color = PantryAccentColor)
                 }
             },
             dismissButton = {
@@ -805,13 +795,21 @@ fun PantryScreen(
                     onClick = { pendingDeletionItem = null },
                     enabled = !uiState.isSaving
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", color = PantryTextSecondary)
                 }
             }
         )
     }
 
 }
+
+private val PantryBackgroundColor = Color(0xFF042012)
+private val PantryCardColor = Color(0xFF0B311F)
+private val PantryChipColor = Color(0xFF114129)
+private val PantryAccentColor = Color(0xFF00E676)
+private val PantryTextPrimary = Color(0xFFEAF7EE)
+private val PantryTextSecondary = Color(0xFF9FC5AE)
+private val PantryBorderColor = Color(0xFF1A5B39)
 
 private enum class PantryCategory(val label: String) {
     PROTEIN("Protein"),
@@ -821,44 +819,56 @@ private enum class PantryCategory(val label: String) {
 }
 
 @Composable
-private fun PantryCategoryHeader(
-    category: PantryCategory,
-    itemCount: Int,
-    isExpanded: Boolean,
-    onToggleExpanded: () -> Unit
+private fun PantryCategoryLabels(
+    selectedCategory: PantryCategory?,
+    categoryCounts: Map<PantryCategory, Int>,
+    onCategorySelected: (PantryCategory?) -> Unit
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggleExpanded),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${category.label} ($itemCount)",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = if (isExpanded) {
-                    Icons.Default.KeyboardArrowUp
-                } else {
-                    Icons.Default.KeyboardArrowDown
-                },
-                contentDescription = if (isExpanded) {
-                    "Collapse ${category.label}"
-                } else {
-                    "Expand ${category.label}"
-                }
+        PantryCategoryChip(
+            text = "All (${categoryCounts.values.sum()})",
+            isSelected = selectedCategory == null,
+            onClick = { onCategorySelected(null) }
+        )
+        PantryCategory.entries.forEach { category ->
+            PantryCategoryChip(
+                text = "${category.label} (${categoryCounts[category] ?: 0})",
+                isSelected = selectedCategory == category,
+                onClick = { onCategorySelected(category) }
             )
         }
+    }
+}
+
+@Composable
+private fun PantryCategoryChip(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) PantryAccentColor else PantryChipColor
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (isSelected) PantryAccentColor else PantryBorderColor
+        )
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isSelected) Color.Black else PantryTextPrimary
+        )
     }
 }
 
@@ -870,32 +880,34 @@ private fun PantryItemCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = PantryCardColor),
+        border = BorderStroke(1.dp, PantryBorderColor)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.Top
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (item.productName.isBlank()) "Unnamed product" else item.productName,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = PantryTextPrimary
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "kcal ${formatDecimalInput(item.resolvedKcal())} • carbs ${formatDecimalInput(item.resolvedCarbs())} • protein ${formatDecimalInput(item.resolvedProt())} • fat ${formatDecimalInput(item.resolvedFat())}",
+                    text = "kcal ${formatDecimalInput(item.resolvedKcal())} | carbs ${formatDecimalInput(item.resolvedCarbs())} | protein ${formatDecimalInput(item.resolvedProt())} | fat ${formatDecimalInput(item.resolvedFat())}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = PantryTextSecondary
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Quantity: ${item.quantity} • Weight package: ${formatDecimalInput(item.resolvedPackageWeightGrams())} g",
+                    text = "Quantity: ${item.quantity} | Package: ${formatDecimalInput(item.resolvedPackageWeightGrams())} g",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = PantryAccentColor
                 )
             }
             IconButton(
@@ -903,7 +915,11 @@ private fun PantryItemCard(
                 enabled = !isSaving,
                 modifier = Modifier.size(32.dp)
             ) {
-                Icon(Icons.Default.Delete, contentDescription = "Remove item")
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Remove item",
+                    tint = PantryAccentColor
+                )
             }
         }
     }
@@ -948,4 +964,5 @@ private fun classifyPantryItem(item: PantryItem): PantryCategory {
         else -> PantryCategory.OTHER
     }
 }
+
 
