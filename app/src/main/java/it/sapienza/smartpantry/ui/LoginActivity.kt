@@ -57,6 +57,7 @@ class LoginActivity : ComponentActivity() {
 
     private lateinit var auth: FirebaseAuth
     private var errorMessage by mutableStateOf<String?>(null)
+    private var successMessage by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,12 +67,14 @@ class LoginActivity : ComponentActivity() {
         setContent {
             SmartPantryTheme {
                 val navController = rememberNavController()
+                var showForgotDialog by remember { mutableStateOf(false) }
+
                 NavHost(navController = navController, startDestination = "login") {
                     composable("login") {
                         LoginScreen(
                             onLoginClick = { email, password -> loginUser(email, password) },
                             onRegisterClick = { navController.navigate("signup") },
-                            onForgotPasswordClick = { /* TODO */ }
+                            onForgotPasswordClick = { showForgotDialog = true }
                         )
                     }
                     composable("signup") {
@@ -83,6 +86,13 @@ class LoginActivity : ComponentActivity() {
                     }
                 }
 
+                if (showForgotDialog) {
+                    ForgotPasswordDialog(
+                        onDismiss = { showForgotDialog = false },
+                        onSendClick = { email -> resetPassword(email) }
+                    )
+                }
+
                 if (errorMessage != null) {
                     AlertDialog(
                         onDismissRequest = { errorMessage = null },
@@ -90,6 +100,22 @@ class LoginActivity : ComponentActivity() {
                         text = { Text(errorMessage!!) },
                         confirmButton = {
                             TextButton(onClick = { errorMessage = null }) {
+                                Text("OK", color = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                        containerColor = Color(0xFF1A2421),
+                        titleContentColor = Color.White,
+                        textContentColor = Color.LightGray
+                    )
+                }
+
+                if (successMessage != null) {
+                    AlertDialog(
+                        onDismissRequest = { successMessage = null },
+                        title = { Text("Success", fontWeight = FontWeight.Bold) },
+                        text = { Text(successMessage!!) },
+                        confirmButton = {
+                            TextButton(onClick = { successMessage = null }) {
                                 Text("OK", color = MaterialTheme.colorScheme.primary)
                             }
                         },
@@ -120,6 +146,21 @@ class LoginActivity : ComponentActivity() {
                     syncWithBackend(auth.currentUser!!.uid, auth.currentUser!!.email ?: "")
                 } else {
                     errorMessage = "Incorrect credentials. Please try again."
+                }
+            }
+    }
+
+    private fun resetPassword(email: String) {
+        if (email.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            errorMessage = "Please enter a valid email address."
+            return
+        }
+        auth.sendPasswordResetEmail(email)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    successMessage = "Password reset email sent to $email."
+                } else {
+                    errorMessage = "Failed to send reset email: ${task.exception?.message}"
                 }
             }
     }
@@ -185,6 +226,57 @@ fun SmartPantryTheme(content: @Composable () -> Unit) {
             onSurface = Color.White
         ),
         content = content
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ForgotPasswordDialog(onDismiss: () -> Unit, onSendClick: (String) -> Unit) {
+    var email by remember { mutableStateOf("") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reset Password", fontWeight = FontWeight.Bold, color = Color.White) },
+        text = {
+            Column {
+                Text("Enter your email address to receive a password reset link.", color = Color.LightGray, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    placeholder = { Text("name@example.com", color = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        containerColor = Color(0xFF0A120E),
+                        unfocusedBorderColor = Color.DarkGray,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { 
+                    onSendClick(email)
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = Color.Black),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Send Link", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        },
+        containerColor = Color(0xFF1A2421)
     )
 }
 
@@ -263,7 +355,9 @@ fun LoginScreen(
                 colors = TextFieldDefaults.outlinedTextFieldColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     unfocusedBorderColor = Color.DarkGray,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
                 ),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next)
@@ -303,7 +397,9 @@ fun LoginScreen(
                 colors = TextFieldDefaults.outlinedTextFieldColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     unfocusedBorderColor = Color.DarkGray,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
                 ),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
