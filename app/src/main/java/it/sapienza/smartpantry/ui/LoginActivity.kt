@@ -59,6 +59,7 @@ class LoginActivity : ComponentActivity() {
     private var errorMessage by mutableStateOf<String?>(null)
     private var successMessage by mutableStateOf<String?>(null)
     private var isLoadingSession by mutableStateOf(true)
+    private var isLoggingIn by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,6 +91,7 @@ class LoginActivity : ComponentActivity() {
                     NavHost(navController = navController, startDestination = "login") {
                         composable("login") {
                             LoginScreen(
+                                isLoading = isLoggingIn,
                                 onLoginClick = { email, password -> loginUser(email, password) },
                                 onRegisterClick = { navController.navigate("signup") },
                                 onForgotPasswordClick = { showForgotDialog = true }
@@ -152,11 +154,13 @@ class LoginActivity : ComponentActivity() {
             errorMessage = "Please fill all fields."
             return
         }
+        isLoggingIn = true
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener(this) { task ->
                 if (task.isSuccessful) {
                     syncWithBackend(auth.currentUser!!.uid, auth.currentUser!!.email ?: "")
                 } else {
+                    isLoggingIn = false
                     errorMessage = "Incorrect credentials. Please try again."
                 }
             }
@@ -257,7 +261,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit, onSendClick: (String) -> Unit) {
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    placeholder = { Text("name@example.com", color = Color.Gray) },
+                    placeholder = { Text("name@example.com", color = Color.DarkGray) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -296,6 +300,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit, onSendClick: (String) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
+    isLoading: Boolean,
     onLoginClick: (String, String) -> Unit,
     onRegisterClick: () -> Unit,
     onForgotPasswordClick: () -> Unit
@@ -424,6 +429,7 @@ fun LoginScreen(
         // Login Button
         Button(
             onClick = { onLoginClick(email, password) },
+            enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -433,7 +439,15 @@ fun LoginScreen(
                 contentColor = Color.Black
             )
         ) {
-            Text(text = "Login", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = Color.Black,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(text = "Login", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))
