@@ -10,24 +10,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,14 +47,17 @@ import it.sapienza.smartpantry.service.RetrofitClient
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
     var isEditing by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
-    val context = LocalContext.current
-    
+    val neonGreen = Color(0xFF00E676)
+    val darkBg = Color(0xFF0A120E)
+    val surfaceColor = Color(0xFF1A2421)
+
     // Form states - Biometrics
     var name by remember { mutableStateOf(user.name) }
     var age by remember { mutableStateOf(user.biometrics.age.toString()) }
@@ -57,15 +65,14 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
     var weight by remember { mutableStateOf(user.biometrics.weight.toString()) }
     var gender by remember { mutableStateOf(user.biometrics.gender) }
     var activityLevel by remember { mutableStateOf(user.biometrics.activityLevel) }
-    
+
     // Form states - Goals
     var fitnessGoal by remember { mutableStateOf(user.goals.fitnessGoal) }
     var dailyKcal by remember { mutableStateOf(user.goals.dailyKcal.toString()) }
     var carbs by remember { mutableStateOf(user.goals.macrosTarget["carbs"]?.toString() ?: "0") }
     var protein by remember { mutableStateOf(user.goals.macrosTarget["protein"]?.toString() ?: "0") }
     var fat by remember { mutableStateOf(user.goals.macrosTarget["fat"]?.toString() ?: "0") }
-    
-    // manualOverride is true when the checkbox is NOT checked
+
     var autoCalculate by remember { mutableStateOf(!user.manualOverride) }
 
     LaunchedEffect(user) {
@@ -97,164 +104,167 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
         "Active (Physical work or daily sport)" to "1.725",
         "Very Active (Athlete or very heavy work)" to "1.9"
     )
-    val genders = listOf("Male", "Female", "Other")
-    val fitnessGoalsList = listOf("Deficit", "Maintenance", "Surplus")
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .background(darkBg)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-            
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // --- Avatar with Glow Effect ---
             Box(
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    .size(100.dp)
+                    .padding(4.dp)
+                    .shadow(12.dp, CircleShape, ambientColor = neonGreen, spotColor = neonGreen)
+                    .border(2.dp, neonGreen, CircleShape)
                     .clickable(enabled = isEditing) { galleryLauncher.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
                 if (selectedImageUri != null) {
-                    AsyncImage(model = selectedImageUri, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                    AsyncImage(model = selectedImageUri, contentDescription = null, modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape), contentScale = ContentScale.Crop)
                 } else if (user.profileImageUrl.isNotEmpty()) {
-                    AsyncImage(model = user.profileImageUrl, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                    AsyncImage(model = user.profileImageUrl, contentDescription = null, modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape), contentScale = ContentScale.Crop)
                 } else {
-                    Icon(imageVector = if (isEditing) Icons.Default.AddAPhoto else Icons.Default.Person, contentDescription = null, modifier = Modifier.size(50.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Icon(imageVector = if (isEditing) Icons.Default.AddAPhoto else Icons.Default.Person, contentDescription = null, modifier = Modifier.size(45.dp), tint = Color.Gray)
                 }
             }
 
+            Spacer(modifier = Modifier.height(4.dp))
+            if (isEditing) {
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, fontSize = 18.sp),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(focusedBorderColor = neonGreen, unfocusedBorderColor = Color.Gray)
+                )
+            } else {
+                Text(text = user.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            }
+            Text(text = user.email, color = neonGreen, fontSize = 13.sp, textAlign = TextAlign.Center)
+
             Spacer(modifier = Modifier.height(8.dp))
-            Text(text = user.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-            Text(text = user.email, style = MaterialTheme.typography.titleMedium, color = Color.Gray, textAlign = TextAlign.Center)
+
+            // --- Section: Personal Stats ---
+            SectionLabel("PERSONAL STATS", neonGreen)
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (isEditing) {
+                // --- EDIT MODE GRID ---
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EditStatField("Age", age, Modifier.weight(1f), isDecimal = false) { age = it }
+                    DropdownSelectorCompact("Gender", listOf("Male", "Female", "Other"), gender.replaceFirstChar { it.uppercase() }, Modifier.weight(1f)) {
+                        gender = it.lowercase()
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    EditStatField("Height (cm)", height, Modifier.weight(1f)) { height = it }
+                    EditStatField("Weight (kg)", weight, Modifier.weight(1f)) { weight = it }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DropdownSelectorCompact(
+                        label = "Activity",
+                        options = activityLevels.map { it.first },
+                        selected = activityLevels.find { it.second == activityLevel }?.first ?: activityLevel,
+                        modifier = Modifier.weight(1f)
+                    ) { selectedFullLabel ->
+                        activityLevel = activityLevels.find { it.first == selectedFullLabel }?.second ?: activityLevel
+                    }
+
+                    DropdownSelectorCompact(
+                        label = "Goal",
+                        options = listOf("Deficit", "Maintenance", "Surplus"),
+                        selected = fitnessGoal.replaceFirstChar { it.uppercase() },
+                        modifier = Modifier.weight(1f)
+                    ) { fitnessGoal = it.lowercase() }
+                }
+            } else {
+                // Display Mode Grid
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DisplayStatCard("Age", "${user.biometrics.age} Years", Modifier.weight(1f))
+                    DisplayStatCard("Gender", user.biometrics.gender.replaceFirstChar { it.uppercase() }, Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DisplayStatCard("Height", "${user.biometrics.height} cm", Modifier.weight(1f))
+                    DisplayStatCard("Weight", "${user.biometrics.weight} kg", Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                val actLabel = activityLevels.find { it.second == user.biometrics.activityLevel }?.first?.substringBefore(" (") ?: user.biometrics.activityLevel
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DisplayStatCard(
+                        label = "Activity",
+                        value = actLabel,
+                        icon = Icons.Default.FitnessCenter,
+                        modifier = Modifier.weight(1f)
+                    )
+                    DisplayStatCard(
+                        label = "Goal",
+                        value = user.goals.fitnessGoal.replaceFirstChar { it.uppercase() },
+                        icon = Icons.Default.Flag,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
-            Card(
+            // --- Section: Nutritional Targets ---
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (isEditing) {
-                        OutlinedTextField(
-                            value = name, 
-                            onValueChange = { name = it }, 
-                            label = { Text("Name") }, 
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) })
+                Text(text = "DAILY TARGETS", color = neonGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (isEditing) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Auto-calculate", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Switch(
+                            checked = autoCalculate,
+                            onCheckedChange = { autoCalculate = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = neonGreen,
+                                uncheckedThumbColor = Color.Gray,
+                                uncheckedTrackColor = surfaceColor
+                            ),
+                            modifier = Modifier.scale(0.7f)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = age, onValueChange = { age = it }, label = { Text("Age") }, modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) })
-                            )
-                            OutlinedTextField(
-                                value = height, onValueChange = { height = it }, label = { Text("Height") }, modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) })
-                            )
-                            OutlinedTextField(
-                                value = weight, onValueChange = { weight = it }, label = { Text("Weight") }, modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        DropdownSelector(label = "Gender", options = genders, selected = gender.replaceFirstChar { it.uppercase() }) { gender = it.lowercase() }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        DropdownSelector(label = "Activity", options = activityLevels.map { it.first }, selected = activityLevels.find { it.second == activityLevel }?.first ?: "Select") { lbl ->
-                            activityLevel = activityLevels.find { it.first == lbl }?.second ?: activityLevel
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        DropdownSelector(label = "Fitness Goal", options = fitnessGoalsList, selected = fitnessGoal.replaceFirstChar { it.uppercase() }) { fitnessGoal = it }
-                        
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically, 
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Target Goals", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { autoCalculate = !autoCalculate }) {
-                                Checkbox(
-                                    checked = autoCalculate, 
-                                    onCheckedChange = { autoCalculate = it },
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Text("Auto-calculate", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = dailyKcal, 
-                            onValueChange = { dailyKcal = it }, 
-                            label = { Text("Daily Kcal") }, 
-                            modifier = Modifier.fillMaxWidth(), 
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
-                            enabled = !autoCalculate
-                        )
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = carbs, onValueChange = { carbs = it }, label = { Text("Carbs (g)") }, modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) }),
-                                enabled = !autoCalculate
-                            )
-                            OutlinedTextField(
-                                value = protein, onValueChange = { protein = it }, label = { Text("Prot (g)") }, modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) }),
-                                enabled = !autoCalculate
-                            )
-                            OutlinedTextField(
-                                value = fat, onValueChange = { fat = it }, label = { Text("Fat (g)") }, modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                enabled = !autoCalculate
-                            )
-                        }
-                    } else {
-                        ProfileInfoRow(label = "Age", value = user.biometrics.age.toString())
-                        ProfileInfoRow(label = "Gender", value = user.biometrics.gender.replaceFirstChar { it.uppercase() })
-                        ProfileInfoRow(label = "Height", value = "${user.biometrics.height} cm")
-                        ProfileInfoRow(label = "Weight", value = "${user.biometrics.weight} kg")
-                        
-                        val currentActivityLabel = activityLevels.find { it.second == user.biometrics.activityLevel }?.first ?: user.biometrics.activityLevel
-                        ProfileInfoRow(label = "Activity", value = currentActivityLabel)
-                        
-                        ProfileInfoRow(label = "Fitness Goal", value = user.goals.fitnessGoal.replaceFirstChar { it.uppercase() })
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Box(modifier = Modifier.align(Alignment.CenterHorizontally).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 20.dp, vertical = 4.dp)) {
-                            Text(text = "Daily Goals", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.labelMedium)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        ProfileInfoRow(label = "Daily Kcal", value = "${user.goals.dailyKcal} kcal")
-                        user.goals.macrosTarget.forEach { (macro, value) -> ProfileInfoRow(label = macro.replaceFirstChar { it.uppercase() }, value = "$value g") }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(80.dp))
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            NutritionalCardMockup(user, isEditing, dailyKcal, carbs, protein, fat, autoCalculate, onKcalChange = { dailyKcal = it }, onCarbsChange = { carbs = it }, onProtChange = { protein = it }, onFatChange = { fat = it }, onAutoToggle = { autoCalculate = it })
+            
+            Spacer(modifier = Modifier.height(80.dp)) // Spazio per il FAB
         }
 
-        ExtendedFloatingActionButton(
+        // --- Floating Action Button ---
+        FloatingActionButton(
             onClick = {
                 if (isEditing) {
                     val updatedUser = user.copy(
@@ -291,12 +301,212 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
                 }
                 isEditing = !isEditing
             },
-            icon = { Icon(if (isEditing) Icons.Default.Save else Icons.Default.Edit, contentDescription = null) },
-            text = { Text(if (isEditing) "Save" else "Edit Profile") },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp)
+                .size(56.dp),
+            containerColor = neonGreen,
+            contentColor = Color.Black,
+            shape = CircleShape
+        ) {
+            Icon(imageVector = if (isEditing) Icons.Default.Save else Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+fun SectionLabel(text: String, color: Color) {
+    Text(text = text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
+}
+
+@Composable
+fun DisplayStatCard(label: String, value: String, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label.uppercase(), color = Color.Gray, fontSize = 10.sp)
+                Text(value, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+            icon?.let { Icon(it, null, tint = Color(0xFF00E676), modifier = Modifier.size(16.dp)) }
+        }
+    }
+}
+
+@Composable
+fun EditStatField(label: String, value: String, modifier: Modifier = Modifier, isDecimal: Boolean = true, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { newValue ->
+            val filtered = if (isDecimal) {
+                if (newValue.count { it == '.' } <= 1) {
+                    newValue.filter { it.isDigit() || it == '.' }
+                } else {
+                    value
+                }
+            } else {
+                newValue.filter { it.isDigit() }
+            }
+            onValueChange(filtered)
+        },
+        label = { Text(text = label, fontSize = 11.sp, maxLines = 1) },
+        modifier = modifier.height(52.dp),
+        textStyle = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium),
+        keyboardOptions = KeyboardOptions(keyboardType = if (isDecimal) KeyboardType.Decimal else KeyboardType.Number),
+        singleLine = true,
+        shape = RoundedCornerShape(10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFF00E676),
+            unfocusedBorderColor = Color.Gray,
+            focusedContainerColor = Color(0xFF1A2421),
+            unfocusedContainerColor = Color(0xFF1A2421),
+            focusedLabelColor = Color(0xFF00E676)
         )
+    )
+}
+
+@Composable
+fun NutritionalCardMockup(user: User, isEditing: Boolean, kcal: String, carbs: String, prot: String, fat: String, auto: Boolean, onKcalChange: (String) -> Unit, onCarbsChange: (String) -> Unit, onProtChange: (String) -> Unit, onFatChange: (String) -> Unit, onAutoToggle: (Boolean) -> Unit) {
+    val neonGreen = Color(0xFF00E676)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Target Calories", color = Color.Gray, fontSize = 11.sp)
+                    if (isEditing && !auto) {
+                        OutlinedTextField(
+                            value = kcal,
+                            onValueChange = { onKcalChange(it.filter { char -> char.isDigit() }) },
+                            modifier = Modifier.width(90.dp).height(48.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            textStyle = TextStyle(color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = neonGreen,
+                                unfocusedBorderColor = Color.Gray,
+                                focusedContainerColor = Color(0xFF0A120E),
+                                unfocusedContainerColor = Color(0xFF0A120E)
+                            )
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(text = if(isEditing) kcal else "${user.goals.dailyKcal}", color = neonGreen, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(text = " kcal", color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(bottom = 3.dp))
+                        }
+                    }
+                }
+                Box(modifier = Modifier
+                    .size(40.dp)
+                    .background(neonGreen.copy(0.1f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Bolt, null, tint = neonGreen, modifier = Modifier.size(24.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                MacroStatBox("CARBS", if(isEditing && !auto) carbs else "${user.goals.macrosTarget["carbs"]}", isEditing && !auto, onCarbsChange)
+                MacroStatBox("FAT", if(isEditing && !auto) fat else "${user.goals.macrosTarget["fat"]}", isEditing && !auto, onFatChange)
+                MacroStatBox("PROT", if(isEditing && !auto) prot else "${user.goals.macrosTarget["protein"]}", isEditing && !auto, onProtChange)
+            }
+        }
+    }
+}
+
+@Composable
+fun MacroStatBox(label: String, value: String, isEditing: Boolean, onValueChange: (String) -> Unit) {
+    Column(modifier = Modifier.width(80.dp)) {
+        Text(label, color = Color.Gray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        if (isEditing) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { onValueChange(it.filter { char -> char.isDigit() }) },
+                modifier = Modifier.fillMaxWidth().height(45.dp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                textStyle = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF00E676),
+                    unfocusedBorderColor = Color.Gray,
+                    focusedContainerColor = Color(0xFF0A120E),
+                    unfocusedContainerColor = Color(0xFF0A120E)
+                )
+            )
+        } else {
+            Text("${value}g", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(3.dp))
+            LinearProgressIndicator(progress = { 0.7f }, modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(CircleShape), color = Color(0xFF00E676), trackColor = Color(0xFF2C2E33))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DropdownSelectorCompact(
+    label: String,
+    options: List<String>,
+    selected: String,
+    modifier: Modifier = Modifier,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val displayText = selected.substringBefore(" (")
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, fontSize = 10.sp) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+                .height(52.dp),
+            textStyle = TextStyle(fontSize = 12.sp, color = Color.White),
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color(0xFF1A2421),
+                unfocusedContainerColor = Color(0xFF1A2421),
+                unfocusedBorderColor = Color.Gray,
+                focusedBorderColor = Color(0xFF00E676)
+            )
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(Color(0xFF1A2421))
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option, color = Color.White, fontSize = 13.sp) },
+                    onClick = {
+                        onSelected(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 
@@ -304,12 +514,8 @@ private fun saveUserToBackend(updatedUser: User, onUserUpdate: (User) -> Unit) {
     RetrofitClient.instance.updateUser(updatedUser).enqueue(object : Callback<UpdateUserResponse> {
         override fun onResponse(call: Call<UpdateUserResponse>, response: Response<UpdateUserResponse>) {
             if (response.isSuccessful) {
-                response.body()?.let { 
-                    val finalGoals = if (updatedUser.manualOverride) {
-                        updatedUser.goals
-                    } else {
-                        updatedUser.goals.copy(dailyKcal = it.dailyKcal, macrosTarget = it.macros)
-                    }
+                response.body()?.let {
+                    val finalGoals = if (updatedUser.manualOverride) updatedUser.goals else updatedUser.goals.copy(dailyKcal = it.dailyKcal, macrosTarget = it.macros)
                     onUserUpdate(updatedUser.copy(goals = finalGoals, manualOverride = updatedUser.manualOverride))
                 }
             }
@@ -318,22 +524,11 @@ private fun saveUserToBackend(updatedUser: User, onUserUpdate: (User) -> Unit) {
     })
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DropdownSelector(label: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(value = selected, onValueChange = {}, readOnly = true, label = { Text(label) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }, modifier = Modifier.menuAnchor().fillMaxWidth())
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option -> DropdownMenuItem(text = { Text(option) }, onClick = { onSelect(option); expanded = false }) }
-        }
-    }
-}
-
-@Composable
-fun ProfileInfoRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(text = label, fontWeight = FontWeight.SemiBold, color = Color.Gray, style = MaterialTheme.typography.bodyLarge)
-        Text(text = value, style = MaterialTheme.typography.bodyLarge)
-    }
+fun getActivityLevelLabel(value: String): String = when(value) {
+    "1.2" -> "Sedentary"
+    "1.375" -> "Light Exercise (1-3x/week)"
+    "1.55" -> "Moderate Exercise (3-5x/week)"
+    "1.725" -> "Active"
+    "1.9" -> "Very Active"
+    else -> value
 }

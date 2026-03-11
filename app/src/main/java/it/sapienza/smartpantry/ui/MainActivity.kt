@@ -12,8 +12,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -35,11 +37,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         val user = intent.getParcelableExtra<User>("user_extra") ?: User()
 
         setContent {
-            MaterialTheme {
+            SmartPantryMainTheme {
                 MainScreen(
                     initialUser = user,
                     onLogout = {
@@ -53,6 +55,25 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+@Composable
+fun SmartPantryMainTheme(content: @Composable () -> Unit) {
+    val darkGreenBg = Color(0xFF0A120E)
+    val neonGreen = Color(0xFF00E676)
+    val surfaceColor = Color(0xFF1A2421)
+
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            background = darkGreenBg,
+            surface = surfaceColor,
+            primary = neonGreen,
+            onBackground = Color.White,
+            onSurface = Color.White,
+            onSurfaceVariant = Color.Gray
+        ),
+        content = content
+    )
 }
 
 sealed class Screen(val route: String, val titleRes: Int, val iconRes: Int) {
@@ -71,26 +92,30 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    
+
     var user by remember { mutableStateOf(initialUser) }
     val today = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH).format(Date())
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
-    
+    val neonGreen = Color(0xFF00E676)
+    val unselectedGrey = Color.Gray
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = today) },
+                title = { Text(text = today, color = Color.White, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
                         Icon(
                             imageVector = Icons.Default.ExitToApp,
-                            contentDescription = "Logout"
+                            contentDescription = "Logout",
+                            tint = unselectedGrey
                         )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { 
+                    val isNotificationsSelected = currentDestination?.hierarchy?.any { it.route == Screen.Notifications.route } == true
+                    IconButton(onClick = {
                         if (currentDestination?.route != Screen.Notifications.route) {
                             navController.navigate(Screen.Notifications.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -103,10 +128,12 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
                     }) {
                         Icon(
                             painter = painterResource(id = Screen.Notifications.iconRes),
-                            contentDescription = stringResource(id = Screen.Notifications.titleRes)
+                            contentDescription = stringResource(id = Screen.Notifications.titleRes),
+                            tint = if (isNotificationsSelected) neonGreen else unselectedGrey
                         )
                     }
-                    IconButton(onClick = { 
+                    val isProfileSelected = currentDestination?.hierarchy?.any { it.route == Screen.Profile.route } == true
+                    IconButton(onClick = {
                         if (currentDestination?.route != Screen.Profile.route) {
                             navController.navigate(Screen.Profile.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -119,28 +146,39 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
                     }) {
                         Icon(
                             painter = painterResource(id = Screen.Profile.iconRes),
-                            contentDescription = stringResource(id = Screen.Profile.titleRes)
+                            contentDescription = stringResource(id = Screen.Profile.titleRes),
+                            tint = if (isProfileSelected) neonGreen else unselectedGrey
                         )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = Color.White
                 )
             )
         },
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                tonalElevation = 0.dp
             ) {
                 bottomItems.forEach { screen ->
                     val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
                     NavigationBarItem(
-                        icon = { Icon(painterResource(id = screen.iconRes), contentDescription = null) },
-                        label = { Text(stringResource(id = screen.titleRes), fontSize = 10.sp) },
+                        icon = {
+                            Icon(
+                                painterResource(id = screen.iconRes),
+                                contentDescription = null,
+                                tint = if (selected) neonGreen else unselectedGrey
+                            )
+                        },
+                        label = {
+                            Text(
+                                stringResource(id = screen.titleRes),
+                                fontSize = 10.sp,
+                                color = if (selected) neonGreen else unselectedGrey
+                            )
+                        },
                         selected = selected,
                         onClick = {
                             if (currentDestination?.route != screen.route) {
@@ -152,31 +190,43 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
                                     restoreState = true
                                 }
                             }
-                        }
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = neonGreen,
+                            selectedTextColor = neonGreen,
+                            unselectedIconColor = unselectedGrey,
+                            unselectedTextColor = unselectedGrey,
+                            indicatorColor = Color.Transparent // Rimuove il cerchio di selezione di default di M3
+                        )
                     )
                 }
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            composable(Screen.Home.route) { HomeScreen(user) }
-            composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
-            composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
-            composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }
-            composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
-            composable(Screen.Profile.route) { 
-                ProfileScreen(
-                    user = user,
-                    onUserUpdate = { updatedUser -> 
-                        user = updatedUser 
-                    }
-                ) 
+            NavHost(
+                navController = navController,
+                startDestination = Screen.Home.route,
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable(Screen.Home.route) { HomeScreen(user) }
+                composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
+                composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
+                composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }
+                composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
+                composable(Screen.Profile.route) {
+                    ProfileScreen(
+                        user = user,
+                        onUserUpdate = { updatedUser ->
+                            user = updatedUser
+                        }
+                    )
+                }
+                composable(Screen.Notifications.route) { PlaceholderScreen(stringResource(id = R.string.title_notifications)) }
             }
-            composable(Screen.Notifications.route) { PlaceholderScreen(stringResource(id = R.string.title_notifications)) }
         }
     }
 }
@@ -184,6 +234,6 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
 @Composable
 fun PlaceholderScreen(text: String) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = text, style = MaterialTheme.typography.headlineMedium)
+        Text(text = text, style = MaterialTheme.typography.headlineMedium, color = Color.White)
     }
 }
