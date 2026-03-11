@@ -40,6 +40,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.google.firebase.storage.FirebaseStorage
 import it.sapienza.smartpantry.model.UpdateUserResponse
 import it.sapienza.smartpantry.model.User
@@ -127,14 +129,31 @@ fun ProfileScreen(user: User, onUserUpdate: (User) -> Unit) {
                     .clickable(enabled = isEditing) { galleryLauncher.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
-                if (selectedImageUri != null) {
-                    AsyncImage(model = selectedImageUri, contentDescription = null, modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape), contentScale = ContentScale.Crop)
-                } else if (user.profileImageUrl.isNotEmpty()) {
-                    AsyncImage(model = user.profileImageUrl, contentDescription = null, modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape), contentScale = ContentScale.Crop)
+                val context = LocalContext.current
+                val model = remember(selectedImageUri, user.profileImageUrl) {
+                    if (selectedImageUri != null) {
+                        selectedImageUri
+                    } else if (user.profileImageUrl.isNotEmpty()) {
+                        ImageRequest.Builder(context)
+                            .data(user.profileImageUrl)
+                            .crossfade(true)
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .memoryCachePolicy(CachePolicy.ENABLED)
+                            .build()
+                    } else {
+                        null
+                    }
+                }
+
+                if (model != null) {
+                    AsyncImage(
+                        model = model,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
                 } else {
                     Icon(imageVector = if (isEditing) Icons.Default.AddAPhoto else Icons.Default.Person, contentDescription = null, modifier = Modifier.size(45.dp), tint = Color.Gray)
                 }

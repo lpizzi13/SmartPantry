@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +25,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import coil.imageLoader
+import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
@@ -99,6 +102,17 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     val neonGreen = Color(0xFF00E676)
     val unselectedGrey = Color.Gray
+
+    // Prefetch profile image to avoid delay in ProfileScreen
+    val context = LocalContext.current
+    LaunchedEffect(user.profileImageUrl) {
+        if (user.profileImageUrl.isNotEmpty()) {
+            val request = ImageRequest.Builder(context)
+                .data(user.profileImageUrl)
+                .build()
+            context.imageLoader.enqueue(request)
+        }
+    }
 
     Scaffold(
         topBar = {
