@@ -485,13 +485,13 @@ private fun FoodEditorDialog(
     )
 }
 
-private val SearchBackgroundColor = Color(0xFF042012)
-private val SearchCardColor = Color(0xFF0B311F)
-private val SearchItemColor = Color(0xFF114129)
+private val SearchBackgroundColor = Color(0xFF0A120E)
+private val SearchCardColor = Color(0xFF1A2421)
+private val SearchItemColor = Color(0xFF1E2124)
 private val SearchAccentColor = Color(0xFF00E676)
-private val SearchTextPrimary = Color(0xFFEAF7EE)
-private val SearchTextSecondary = Color(0xFF9FC5AE)
-private val SearchBorderColor = Color(0xFF1A5B39)
+private val SearchTextPrimary = Color.White
+private val SearchTextSecondary = Color.Gray
+private val SearchBorderColor = Color(0xFF2C2E33)
 
 @Composable
 private fun searchFieldColors() = OutlinedTextFieldDefaults.colors(

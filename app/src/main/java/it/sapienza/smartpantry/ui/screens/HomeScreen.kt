@@ -32,6 +32,7 @@ fun HomeScreen(user: User) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Color(0xFF0A120E))
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .verticalScroll(scrollState)
     ) {
@@ -44,11 +45,10 @@ fun HomeScreen(user: User) {
             currentFats = consumedFats
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         SectionHeader("Today's Meals")
         
-        // Tutti i pasti partono con "Not consumed yet" e il tasto + non fa nulla
         MealItem("Breakfast", "Not consumed yet", Icons.Default.WbTwilight) { }
         MealItem("Lunch", "Not consumed yet", Icons.Default.WbSunny) { }
         MealItem("Dinner", "Not consumed yet", Icons.Default.NightsStay) { }
@@ -61,10 +61,11 @@ fun HomeScreen(user: User) {
 @Composable
 fun SectionHeader(title: String) {
     Text(
-        text = title,
-        style = MaterialTheme.typography.titleLarge,
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(bottom = 8.dp)
+        color = Color(0xFF00E676),
+        modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
     )
 }
 
@@ -82,43 +83,43 @@ fun NutritionCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121417))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Calories (Kcal)", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                Text("CALORIES", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         text = "$currentKcal",
                         color = Color(0xFF00E676),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 28.sp
                     )
                     Text(
-                        text = " / $targetKcal",
+                        text = " / $targetKcal kcal",
                         color = Color.Gray,
                         fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
                 progress = { progress.coerceAtMost(1f) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp),
+                    .height(8.dp),
                 color = Color(0xFF00E676),
-                trackColor = Color(0xFF2C2E33),
+                trackColor = Color(0xFF0A120E),
                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 val targetProteins = user.goals.macrosTarget["protein"] ?: 0
@@ -126,7 +127,7 @@ fun NutritionCard(
                 val targetFats = user.goals.macrosTarget["fat"] ?: 0
                 
                 MacroProgress(
-                    "PROTEINS", 
+                    "PROTEIN", 
                     "${currentProteins}g", 
                     "${targetProteins}g", 
                     if (targetProteins > 0) currentProteins.toFloat() / targetProteins else 0f
@@ -138,7 +139,7 @@ fun NutritionCard(
                     if (targetCarbs > 0) currentCarbs.toFloat() / targetCarbs else 0f
                 )
                 MacroProgress(
-                    "FATS", 
+                    "FAT", 
                     "${currentFats}g", 
                     "${targetFats}g", 
                     if (targetFats > 0) currentFats.toFloat() / targetFats else 0f
@@ -150,18 +151,18 @@ fun NutritionCard(
 
 @Composable
 fun MacroProgress(label: String, current: String, target: String, progress: Float) {
-    Column(modifier = Modifier.width(90.dp)) {
-        Text(label, fontSize = 9.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+    Column(modifier = Modifier.width(95.dp)) {
+        Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(current, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(" / $target", color = Color.Gray, fontSize = 9.sp, modifier = Modifier.padding(bottom = 1.dp))
+            Text(current, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(" / $target", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(bottom = 1.dp, start = 2.dp))
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         LinearProgressIndicator(
             progress = { progress.coerceAtMost(1f) },
             modifier = Modifier.fillMaxWidth().height(4.dp),
             color = Color(0xFF00E676),
-            trackColor = Color(0xFF2C2E33),
+            trackColor = Color(0xFF0A120E),
             strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
         )
     }
@@ -172,9 +173,9 @@ fun MealItem(title: String, subtitle: String, icon: ImageVector, onAddClick: () 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121417))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
     ) {
         Row(
             modifier = Modifier
@@ -183,9 +184,9 @@ fun MealItem(title: String, subtitle: String, icon: ImageVector, onAddClick: () 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(40.dp),
-                shape = RoundedCornerShape(10.dp),
-                color = Color(0xFF1E2124)
+                modifier = Modifier.size(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF0A120E)
             ) {
                 Icon(
                     imageVector = icon,
@@ -195,7 +196,7 @@ fun MealItem(title: String, subtitle: String, icon: ImageVector, onAddClick: () 
                 )
             }
             
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
             
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)

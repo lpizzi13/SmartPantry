@@ -2,6 +2,7 @@ package it.sapienza.smartpantry.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
@@ -689,10 +693,11 @@ fun PantryScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(PantryBackgroundColor)
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("User not authenticated. Please log in again.")
+            Text("User not authenticated. Please log in again.", color = Color.White)
         }
         return
     }
@@ -703,7 +708,8 @@ fun PantryScreen(
             FloatingActionButton(
                 onClick = onOpenSearchFood,
                 containerColor = PantryAccentColor,
-                contentColor = Color.Black
+                contentColor = Color.Black,
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add item")
             }
@@ -713,24 +719,21 @@ fun PantryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (selectedCategory == null) {
-                        "${uiState.pantryItems.size} items"
-                    } else {
-                        "${selectedCategory?.label}: ${filteredItems.size} items"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PantryTextSecondary
-                )
-            }
+            val currentCategory = selectedCategory
+            Text(
+                text = if (currentCategory == null) {
+                    "${uiState.pantryItems.size} ITEMS TOTAL"
+                } else {
+                    "${currentCategory.label.uppercase()}: ${filteredItems.size} ITEMS"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = PantryAccentColor
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             PantryCategoryLabels(
                 selectedCategory = selectedCategory,
@@ -738,21 +741,21 @@ fun PantryScreen(
                 onCategorySelected = { selectedCategory = it }
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (uiState.pantryItems.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Your pantry is empty.", color = PantryTextSecondary)
+                    Text("Your pantry is empty.", color = Color.Gray)
                 }
             } else if (filteredItems.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No items in this category.", color = PantryTextSecondary)
+                    Text("No items in this category.", color = Color.Gray)
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(
                         filteredItems,
@@ -775,8 +778,8 @@ fun PantryScreen(
                 if (!uiState.isSaving) pendingDeletionItem = null
             },
             containerColor = PantryCardColor,
-            titleContentColor = PantryTextPrimary,
-            textContentColor = PantryTextSecondary,
+            titleContentColor = Color.White,
+            textContentColor = Color.Gray,
             title = { Text("Remove item?") },
             text = { Text("Are you sure you want to remove this item from the pantry?") },
             confirmButton = {
@@ -787,7 +790,7 @@ fun PantryScreen(
                     },
                     enabled = !uiState.isSaving
                 ) {
-                    Text("Remove", color = PantryAccentColor)
+                    Text("Remove", color = PantryAccentColor, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -795,7 +798,7 @@ fun PantryScreen(
                     onClick = { pendingDeletionItem = null },
                     enabled = !uiState.isSaving
                 ) {
-                    Text("Cancel", color = PantryTextSecondary)
+                    Text("Cancel", color = Color.Gray)
                 }
             }
         )
@@ -803,13 +806,11 @@ fun PantryScreen(
 
 }
 
-private val PantryBackgroundColor = Color(0xFF042012)
-private val PantryCardColor = Color(0xFF0B311F)
-private val PantryChipColor = Color(0xFF114129)
+private val PantryBackgroundColor = Color(0xFF0A120E)
+private val PantryCardColor = Color(0xFF1A2421)
+private val PantryChipColor = Color(0xFF1A2421)
 private val PantryAccentColor = Color(0xFF00E676)
-private val PantryTextPrimary = Color(0xFFEAF7EE)
-private val PantryTextSecondary = Color(0xFF9FC5AE)
-private val PantryBorderColor = Color(0xFF1A5B39)
+private val PantryBorderColor = Color(0xFF2C2E33)
 
 private enum class PantryCategory(val label: String) {
     PROTEIN("Protein"),
@@ -831,13 +832,13 @@ private fun PantryCategoryLabels(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         PantryCategoryChip(
-            text = "All (${categoryCounts.values.sum()})",
+            text = "ALL (${categoryCounts.values.sum()})",
             isSelected = selectedCategory == null,
             onClick = { onCategorySelected(null) }
         )
         PantryCategory.entries.forEach { category ->
             PantryCategoryChip(
-                text = "${category.label} (${categoryCounts[category] ?: 0})",
+                text = "${category.label.uppercase()} (${categoryCounts[category] ?: 0})",
                 isSelected = selectedCategory == category,
                 onClick = { onCategorySelected(category) }
             )
@@ -851,23 +852,18 @@ private fun PantryCategoryChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
+    Surface(
         modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) PantryAccentColor else PantryChipColor
-        ),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isSelected) PantryAccentColor else PantryBorderColor
-        )
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) PantryAccentColor else PantryChipColor,
+        border = if (isSelected) null else BorderStroke(1.dp, PantryBorderColor)
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isSelected) Color.Black else PantryTextPrimary
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (isSelected) Color.Black else Color.White
         )
     }
 }
@@ -881,44 +877,62 @@ private fun PantryItemCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = PantryCardColor),
-        border = BorderStroke(1.dp, PantryBorderColor)
+        colors = CardDefaults.cardColors(containerColor = PantryCardColor)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Surface(
+                modifier = Modifier.size(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = PantryBackgroundColor
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = item.quantity.toString(),
+                        color = PantryAccentColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (item.productName.isBlank()) "Unnamed product" else item.productName,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    color = PantryTextPrimary
+                    color = Color.White
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "kcal ${formatDecimalInput(item.resolvedKcal())} | carbs ${formatDecimalInput(item.resolvedCarbs())} | protein ${formatDecimalInput(item.resolvedProt())} | fat ${formatDecimalInput(item.resolvedFat())}",
+                    text = "kcal ${formatDecimalInput(item.resolvedKcal())} • ${formatDecimalInput(item.resolvedPackageWeightGrams())}g",
                     style = MaterialTheme.typography.bodySmall,
-                    color = PantryTextSecondary
+                    color = Color.Gray
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Quantity: ${item.quantity} | Package: ${formatDecimalInput(item.resolvedPackageWeightGrams())} g",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PantryAccentColor
+                    text = "C: ${formatDecimalInput(item.resolvedCarbs())}g • P: ${formatDecimalInput(item.resolvedProt())}g • F: ${formatDecimalInput(item.resolvedFat())}g",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
                 )
             }
+            
             IconButton(
                 onClick = onDeleteRequested,
                 enabled = !isSaving,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier
+                    .background(PantryBackgroundColor, RoundedCornerShape(10.dp))
+                    .size(36.dp)
             ) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Remove item",
-                    tint = PantryAccentColor
+                    tint = Color.Red.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -933,7 +947,7 @@ private fun displayName(product: OpenFoodFactsProduct): String {
 private fun formatDecimalInput(value: Double?): String {
     val safe = (value ?: 0.0).let { if (it.isFinite() && it >= 0.0) it else 0.0 }
     return if (safe.toLong().toDouble() == safe) safe.toLong().toString()
-    else String.format(Locale.US, "%.2f", safe).trimEnd('0').trimEnd('.')
+    else String.format(Locale.US, "%.1f", safe).trimEnd('0').trimEnd('.')
 }
 
 private fun groupPantryItemsByCategory(items: List<PantryItem>): Map<PantryCategory, List<PantryItem>> {
@@ -964,5 +978,3 @@ private fun classifyPantryItem(item: PantryItem): PantryCategory {
         else -> PantryCategory.OTHER
     }
 }
-
-
