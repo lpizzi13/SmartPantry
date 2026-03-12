@@ -1,12 +1,7 @@
 package it.sapienza.smartpantry.service
-import it.sapienza.smartpantry.model.User
-import it.sapienza.smartpantry.model.UserResponse
-import it.sapienza.smartpantry.model.UserRequest
-import it.sapienza.smartpantry.model.UpdateUserResponse
-import it.sapienza.smartpantry.model.RegisterRequest
+import it.sapienza.smartpantry.model.*
 import retrofit2.Call
-import retrofit2.http.Body
-import retrofit2.http.POST
+import retrofit2.http.*
 
 interface SmartPantryApi {
     @POST("get-user-data")
@@ -17,4 +12,50 @@ interface SmartPantryApi {
 
     @POST("register-user")
     fun registerUser(@Body request: RegisterRequest): Call<UserResponse>
+
+    @GET("pantry/search")
+    fun searchProducts(
+        @Query("q") query: String,
+        @Query("similar") similar: Boolean,
+        @Query("limit") limit: Int,
+        @Query("lang") lang: String
+    ): Call<OpenFoodFactsSearchResponse>
+
+    @GET("pantry/barcode/{code}")
+    fun getProductByBarcode(@Path("code") barcode: String): Call<OpenFoodFactsProductResponse>
+
+    @POST("pantry/add")
+    fun addToPantry(@Body request: PantryAddRequest): Call<Unit>
+
+    @PATCH("pantry/quantity")
+    fun updateItemQuantity(@Body request: PantryQuantityRequest): Call<Unit>
+
+    @GET("pantry/{uid}")
+    fun getPantry(@Path("uid") uid: String): Call<PantryResponse>
 }
+
+data class PantryAddRequest(
+    val uid: String,
+    val openFoodFactsId: String? = null,
+    val productName: String? = null,
+    val quantity: Int,
+    val nutrients: PantryAddNutrients? = null,
+    val packageWeightGrams: Double? = null
+) {
+    init {
+        require(quantity >= 1) { "quantity must be >= 1." }
+    }
+}
+
+data class PantryAddNutrients(
+    val kcal: Double = 0.0,
+    val carbs: Double = 0.0,
+    val fat: Double = 0.0,
+    val protein: Double = 0.0
+)
+
+data class PantryQuantityRequest(
+    val uid: String,
+    val openFoodFactsId: String,
+    val quantity: Int
+)

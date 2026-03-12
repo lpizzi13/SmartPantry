@@ -75,6 +75,7 @@ dependencies {
 
     // GPS
     implementation(libs.play.services.location)
+    implementation(libs.play.services.code.scanner)
 
     // Camera
     implementation(libs.camera.core)
@@ -85,6 +86,7 @@ dependencies {
     // Concurrency (Coroutines)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     // Navigazione & Immagini
     implementation(libs.androidx.navigation.fragment)
@@ -97,4 +99,5 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-firestore")
 }

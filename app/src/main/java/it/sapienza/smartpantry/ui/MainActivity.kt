@@ -31,7 +31,9 @@ import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.ui.screens.HomeScreen
+import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
+import it.sapienza.smartpantry.ui.screens.SearchFoodActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -40,7 +42,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
+        
         val user = intent.getParcelableExtra<User>("user_extra") ?: User()
 
         setContent {
@@ -227,7 +229,14 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
                 modifier = Modifier.padding(innerPadding)
             ) {
                 composable(Screen.Home.route) { HomeScreen(user) }
-                composable(Screen.Pantry.route) { PlaceholderScreen(stringResource(id = R.string.text_pantry_screen)) }
+                composable(Screen.Pantry.route) { PantryScreen(
+                    uid = user.uid,
+                    onOpenSearchFood = {
+                        val intent = Intent(context, SearchFoodActivity::class.java)
+                        intent.putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
+                        context.startActivity(intent)
+                    }
+                ) }
                 composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
                 composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }
                 composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }

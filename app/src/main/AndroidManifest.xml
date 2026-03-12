@@ -38,6 +38,9 @@
             android:name=".ui.MainActivity"
             android:exported="false">
         </activity>
+        <activity
+            android:name=".ui.screens.SearchFoodActivity"
+            android:exported="false" />
     </application>
 
 </manifest>
