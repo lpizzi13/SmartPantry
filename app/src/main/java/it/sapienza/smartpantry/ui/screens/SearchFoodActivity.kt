@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,12 +41,15 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -52,6 +57,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -109,7 +115,7 @@ private fun SearchFoodActivityContent(
 
     if (uid.isBlank()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("User not authenticated. Please log in again.")
+            Text("User not authenticated. Please log in again.", color = SearchTextPrimary)
         }
         return
     }
@@ -129,9 +135,15 @@ private fun SearchFoodActivityContent(
     val pantryById = remember(uiState.pantryItems) { uiState.pantryItems.associateBy { it.openFoodFactsId } }
 
     Scaffold(
+        containerColor = SearchBackgroundColor,
         topBar = {
             TopAppBar(
                 title = { Text("Search food") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SearchBackgroundColor,
+                    titleContentColor = SearchTextPrimary,
+                    navigationIconContentColor = SearchTextPrimary
+                ),
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -153,6 +165,8 @@ private fun SearchFoodActivityContent(
                     modifier = Modifier.weight(1f),
                     singleLine = true,
                     placeholder = { Text("Search food") },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = searchFieldColors(),
                     trailingIcon = {
                         IconButton(
                             onClick = pantryViewModel::searchProducts,
@@ -183,7 +197,11 @@ private fun SearchFoodActivityContent(
                             .addOnCanceledListener { pantryViewModel.onScanStateChanged(false) }
                             .addOnFailureListener { pantryViewModel.onScanStateChanged(false) }
                     },
-                    enabled = !uiState.isScanning
+                    enabled = !uiState.isScanning,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = SearchCardColor,
+                        contentColor = SearchAccentColor
+                    )
                 ) {
                     Icon(Icons.Default.QrCodeScanner, contentDescription = "Barcode scanner")
                 }
@@ -191,7 +209,9 @@ private fun SearchFoodActivityContent(
 
             Spacer(modifier = Modifier.height(10.dp))
             Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
-                if (uiState.isSearching) CircularProgressIndicator()
+                if (uiState.isSearching) {
+                    CircularProgressIndicator(color = SearchAccentColor)
+                }
             }
 
             SearchResultsSection(
@@ -227,18 +247,23 @@ private fun SearchResultsSection(
     onSelectProduct: (OpenFoodFactsProduct) -> Unit,
     onManualEntry: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SearchCardColor)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
                 "Search results",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = SearchTextPrimary
             )
             Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider()
+            HorizontalDivider(color = SearchBorderColor)
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (state.searchResults.isEmpty()) {
                     item {
@@ -250,74 +275,89 @@ private fun SearchResultsSection(
                             },
                             modifier = Modifier.padding(vertical = 10.dp),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = SearchTextSecondary
                         )
                     }
                     if (state.hasSearched) {
                         item {
-                            Row(
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(onClick = onManualEntry)
-                                    .padding(vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clickable(onClick = onManualEntry),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = SearchItemColor)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Manual entry",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        "Create a custom pantry item",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Manual entry",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium,
+                                            color = SearchTextPrimary
+                                        )
+                                        Text(
+                                            "Create a custom pantry item",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = SearchTextSecondary
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Manual entry",
+                                        tint = SearchAccentColor
                                     )
                                 }
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = "Manual entry",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
                             }
                         }
                     }
                 } else {
                     items(state.searchResults, key = { it.code ?: it.hashCode().toString() }) { product ->
                         val uiModel = product.toSearchFood(pantryById)
-                        Row(
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelectProduct(product) }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable { onSelectProduct(product) },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = SearchItemColor)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    uiModel.productName,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    uiModel.brandName,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                uiModel.alreadyInPantryQuantity?.let {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        "Already in pantry: $it",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
+                                        uiModel.productName,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SearchTextPrimary
                                     )
+                                    Text(
+                                        uiModel.brandName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = SearchTextSecondary
+                                    )
+                                    uiModel.alreadyInPantryQuantity?.let {
+                                        Text(
+                                            "Already in pantry: $it",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = SearchAccentColor
+                                        )
+                                    }
                                 }
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Add",
+                                    tint = SearchAccentColor
+                                )
                             }
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Add",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
                         }
-                        HorizontalDivider()
                     }
                 }
             }
@@ -341,6 +381,9 @@ private fun FoodEditorDialog(
 ) {
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
+        containerColor = SearchCardColor,
+        titleContentColor = SearchTextPrimary,
+        textContentColor = SearchTextSecondary,
         title = { Text("Food details") },
         text = {
             Column(
@@ -352,7 +395,9 @@ private fun FoodEditorDialog(
                     onValueChange = onNameChange,
                     label = { Text("Name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
                 OutlinedTextField(
                     value = state.editorQuantityInput,
@@ -360,7 +405,9 @@ private fun FoodEditorDialog(
                     label = { Text("Quantity") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
                 OutlinedTextField(
                     value = state.editorKcalInput,
@@ -368,7 +415,9 @@ private fun FoodEditorDialog(
                     label = { Text("Kcal") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
                 OutlinedTextField(
                     value = state.editorCarbsInput,
@@ -376,7 +425,9 @@ private fun FoodEditorDialog(
                     label = { Text("Carbs") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
                 OutlinedTextField(
                     value = state.editorProtInput,
@@ -384,7 +435,9 @@ private fun FoodEditorDialog(
                     label = { Text("Prot") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
                 OutlinedTextField(
                     value = state.editorFatInput,
@@ -392,7 +445,9 @@ private fun FoodEditorDialog(
                     label = { Text("Fat") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
                 OutlinedTextField(
                     value = state.editorPackageWeightGramsInput,
@@ -400,19 +455,57 @@ private fun FoodEditorDialog(
                     label = { Text("Package weight (g)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
                 )
             }
         },
         confirmButton = {
-            Button(onClick = onSave, enabled = !isSaving) {
+            Button(
+                onClick = onSave,
+                enabled = !isSaving,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SearchAccentColor,
+                    contentColor = Color.Black
+                )
+            ) {
                 Text("Save")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isSaving) {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving,
+                colors = ButtonDefaults.textButtonColors(contentColor = SearchTextSecondary)
+            ) {
                 Text("Cancel")
             }
         }
     )
 }
+
+private val SearchBackgroundColor = Color(0xFF042012)
+private val SearchCardColor = Color(0xFF0B311F)
+private val SearchItemColor = Color(0xFF114129)
+private val SearchAccentColor = Color(0xFF00E676)
+private val SearchTextPrimary = Color(0xFFEAF7EE)
+private val SearchTextSecondary = Color(0xFF9FC5AE)
+private val SearchBorderColor = Color(0xFF1A5B39)
+
+@Composable
+private fun searchFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = SearchTextPrimary,
+    unfocusedTextColor = SearchTextPrimary,
+    focusedContainerColor = SearchCardColor,
+    unfocusedContainerColor = SearchCardColor,
+    focusedBorderColor = SearchAccentColor,
+    unfocusedBorderColor = SearchBorderColor,
+    cursorColor = SearchAccentColor,
+    focusedLabelColor = SearchAccentColor,
+    unfocusedLabelColor = SearchTextSecondary,
+    focusedPlaceholderColor = SearchTextSecondary,
+    unfocusedPlaceholderColor = SearchTextSecondary,
+    focusedTrailingIconColor = SearchAccentColor,
+    unfocusedTrailingIconColor = SearchTextSecondary
+)
