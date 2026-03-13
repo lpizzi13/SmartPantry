@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -214,12 +215,16 @@ private fun SearchFoodActivityContent(
                 }
             }
 
-            SearchResultsSection(
-                state = uiState,
-                pantryById = pantryById,
-                onSelectProduct = pantryViewModel::openEditorFromSearchResult,
-                onManualEntry = pantryViewModel::openEditorFromManualEntry
-            )
+            ManualEntrySection(onManualEntry = pantryViewModel::openEditorFromManualEntry)
+
+            if (uiState.searchResults.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                SearchResultsSection(
+                    state = uiState,
+                    pantryById = pantryById,
+                    onSelectProduct = pantryViewModel::openEditorFromSearchResult
+                )
+            }
         }
     }
 
@@ -241,11 +246,50 @@ private fun SearchFoodActivityContent(
 }
 
 @Composable
+private fun ManualEntrySection(
+    onManualEntry: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onManualEntry),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, Color.Black),
+        colors = CardDefaults.cardColors(containerColor = SearchBorderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Manual entry",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SearchTextPrimary
+                )
+                Text(
+                    "Create a custom pantry item",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SearchTextSecondary
+                )
+            }
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "Manual entry",
+                tint = SearchAccentColor
+            )
+        }
+    }
+}
+
+@Composable
 private fun SearchResultsSection(
     state: PantryUiState,
     pantryById: Map<String, PantryItem>,
-    onSelectProduct: (OpenFoodFactsProduct) -> Unit,
-    onManualEntry: () -> Unit
+    onSelectProduct: (OpenFoodFactsProduct) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -265,98 +309,46 @@ private fun SearchResultsSection(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (state.searchResults.isEmpty()) {
-                    item {
-                        Text(
-                            text = if (state.hasSearched) {
-                                "No products found."
-                            } else {
-                                "Search for a product to see results."
-                            },
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = SearchTextSecondary
-                        )
-                    }
-                    if (state.hasSearched) {
-                        item {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(onClick = onManualEntry),
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = SearchItemColor)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Manual entry",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Medium,
-                                            color = SearchTextPrimary
-                                        )
-                                        Text(
-                                            "Create a custom pantry item",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = SearchTextSecondary
-                                        )
-                                    }
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = "Manual entry",
-                                        tint = SearchAccentColor
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    items(state.searchResults, key = { it.code ?: it.hashCode().toString() }) { product ->
-                        val uiModel = product.toSearchFood(pantryById)
-                        Card(
+                items(state.searchResults, key = { it.code ?: it.hashCode().toString() }) { product ->
+                    val uiModel = product.toSearchFood(pantryById)
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectProduct(product) },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = SearchItemColor)
+                    ) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onSelectProduct(product) },
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = SearchItemColor)
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        uiModel.productName,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium,
-                                        color = SearchTextPrimary
-                                    )
-                                    Text(
-                                        uiModel.brandName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = SearchTextSecondary
-                                    )
-                                    uiModel.alreadyInPantryQuantity?.let {
-                                        Text(
-                                            "Already in pantry: $it",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = SearchAccentColor
-                                        )
-                                    }
-                                }
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = "Add",
-                                    tint = SearchAccentColor
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    uiModel.productName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = SearchTextPrimary
                                 )
+                                Text(
+                                    uiModel.brandName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SearchTextSecondary
+                                )
+                                uiModel.alreadyInPantryQuantity?.let {
+                                    Text(
+                                        "Already in pantry: $it",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = SearchAccentColor
+                                    )
+                                }
                             }
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Add",
+                                tint = SearchAccentColor
+                            )
                         }
                     }
                 }
@@ -432,7 +424,7 @@ private fun FoodEditorDialog(
                 OutlinedTextField(
                     value = state.editorProtInput,
                     onValueChange = onProtChange,
-                    label = { Text("Prot") },
+                    label = { Text("Protein") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
