@@ -10,6 +10,12 @@ interface SmartPantryApi {
     @POST("update-user")
     fun updateUser(@Body user: User): Call<UpdateUserResponse>
 
+    @POST("get-diet")
+    fun getDiet(@Body request: DietRequest): Call<DietResponse>
+
+    @POST("save-diet")
+    fun saveDiet(@Body request: SaveDietRequest): Call<SaveDietResponse>
+
     @POST("register-user")
     fun registerUser(@Body request: RegisterRequest): Call<UserResponse>
 

@@ -30,6 +30,7 @@ import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
+import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
@@ -238,7 +239,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
                     }
                 ) }
                 composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
-                composable(Screen.Diet.route) { PlaceholderScreen(stringResource(id = R.string.text_diet_screen)) }
+                composable(Screen.Diet.route) { DietScreen(uid = user.uid) }
                 composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
                 composable(Screen.Profile.route) {
                     ProfileScreen(
