@@ -62,6 +62,16 @@ data class PantryAddNutrients(
 
 data class PantryQuantityRequest(
     val uid: String,
-    val openFoodFactsId: String,
-    val quantity: Int
-)
+    val openFoodFactsId: String? = null,
+    val productName: String? = null,
+    val quantity: Int,
+    val nutrients: PantryAddNutrients? = null,
+    val packageWeightGrams: Double? = null
+) {
+    init {
+        require(quantity >= 0) { "quantity must be >= 0." }
+        require(
+            !openFoodFactsId.isNullOrBlank() || !productName.isNullOrBlank()
+        ) { "Either openFoodFactsId or productName is required." }
+    }
+}

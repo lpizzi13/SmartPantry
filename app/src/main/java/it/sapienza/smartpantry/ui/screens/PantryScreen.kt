@@ -8,7 +8,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,6 +63,7 @@ import it.sapienza.smartpantry.service.PantryQuantityRequest
 import it.sapienza.smartpantry.service.RetrofitClient
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -122,6 +122,8 @@ class PantryViewModel : ViewModel() {
 
     private var currentUid = ""
     private var currentEditorTarget: EditorTarget? = null
+    private var searchJob: Job? = null
+    private var latestSearchToken: Long = 0L
 
     fun bindToUser(uid: String) {
         if (uid.isBlank()) {
@@ -171,26 +173,44 @@ class PantryViewModel : ViewModel() {
             emitEvent("Enter at least 2 characters to search.")
             return
         }
+
+        searchJob?.cancel()
+        val searchToken = ++latestSearchToken
         _uiState.update { it.copy(isSearching = true, hasSearched = true) }
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             try {
-                val results = searchProductsFromBackend(
+                val result = searchProductsFromBackend(
                     query = query,
                     similar = true,
                     limit = 15,
-                    lang = "en"
+                    lang = "it"
                 )
-                _uiState.update { it.copy(searchResults = results) }
+
+                if (searchToken != latestSearchToken) return@launch
+
+                if (result.isSuccess) {
+                    _uiState.update { it.copy(searchResults = result.getOrNull().orEmpty()) }
+                } else {
+                    _uiState.update { it.copy(searchResults = emptyList()) }
+                    emitEvent(
+                        "Search failed: ${result.exceptionOrNull()?.localizedMessage ?: "unknown error"}"
+                    )
+                }
             } catch (error: Throwable) {
-                emitEvent("Search failed: ${error.localizedMessage ?: "unknown error"}")
+                if (searchToken == latestSearchToken) {
+                    _uiState.update { it.copy(searchResults = emptyList()) }
+                    emitEvent("Search failed: ${error.localizedMessage ?: "unknown error"}")
+                }
             } finally {
-                _uiState.update { it.copy(isSearching = false) }
+                if (searchToken == latestSearchToken) {
+                    _uiState.update { it.copy(isSearching = false) }
+                }
             }
         }
     }
 
     fun openEditorFromSearchResult(product: OpenFoodFactsProduct) {
-        val openFoodFactsId = product.code?.trim().orEmpty()
+        val openFoodFactsId = product.resolvedOpenFoodFactsId().orEmpty()
         if (openFoodFactsId.isBlank()) {
             emitEvent("Invalid product code.")
             return
@@ -228,7 +248,12 @@ class PantryViewModel : ViewModel() {
         _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
-                val result = updateItemQuantity(currentUid, item.openFoodFactsId, 0L)
+                val result = updateItemQuantity(
+                    uid = currentUid,
+                    openFoodFactsId = item.openFoodFactsId.takeIf { it.isNotBlank() },
+                    productName = item.productName.takeIf { it.isNotBlank() },
+                    quantity = 0L
+                )
                 if (result.isSuccess) {
                     _uiState.update { state ->
                         state.copy(
@@ -420,8 +445,8 @@ class PantryViewModel : ViewModel() {
         query: String,
         similar: Boolean = true,
         limit: Int = 15,
-        lang: String = "en"
-    ): List<OpenFoodFactsProduct> = withContext(Dispatchers.IO) {
+        lang: String = "it"
+    ): Result<List<OpenFoodFactsProduct>> = withContext(Dispatchers.IO) {
         try {
             val response = api.searchProducts(
                 query = query,
@@ -429,23 +454,27 @@ class PantryViewModel : ViewModel() {
                 limit = limit,
                 lang = lang
             ).execute()
-            if (response.isSuccessful) {
-                val body = response.body()
-                val ranked = if (similar && !body?.recommended.isNullOrEmpty()) {
-                    body?.recommended.orEmpty()
-                } else {
-                    body?.products.orEmpty()
-                }
-
-                ranked
-                    .filter { !it.code.isNullOrBlank() }
-                    .distinctBy { it.code }
-                    .take(limit)
-            } else {
-                emptyList()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(
+                    IllegalStateException(parseBackendError(response, "Search failed."))
+                )
             }
-        } catch (_: Exception) {
-            emptyList()
+
+            val body = response.body()
+            val ranked = if (!body?.products.isNullOrEmpty()) {
+                body?.products.orEmpty()
+            } else {
+                body?.recommended.orEmpty()
+            }
+
+            val sanitized = ranked
+                .filter { !it.resolvedOpenFoodFactsId().isNullOrBlank() }
+                .distinctBy { it.resolvedOpenFoodFactsId() }
+                .take(limit)
+
+            Result.success(sanitized)
+        } catch (error: Exception) {
+            Result.failure(IllegalStateException(error.localizedMessage ?: "Search failed.", error))
         }
     }
 
@@ -536,19 +565,26 @@ class PantryViewModel : ViewModel() {
 
     private suspend fun updateItemQuantity(
         uid: String,
-        openFoodFactsId: String,
+        openFoodFactsId: String?,
+        productName: String?,
         quantity: Long
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val quantityValue = quantity.toIntOrNullChecked(allowZero = true)
             ?: return@withContext Result.failure(
                 IllegalArgumentException("Quantity must be 0 or greater.")
             )
+        if (openFoodFactsId.isNullOrBlank() && productName.isNullOrBlank()) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Missing item identifier.")
+            )
+        }
 
         try {
             val response = api.updateItemQuantity(
                 PantryQuantityRequest(
                     uid = uid,
                     openFoodFactsId = openFoodFactsId,
+                    productName = productName,
                     quantity = quantityValue
                 )
             ).execute()
@@ -569,7 +605,7 @@ class PantryViewModel : ViewModel() {
         fallbackBarcode: String
     ): BarcodeResolution {
         val product = body?.product
-        val resolvedId = product?.code?.trim().orEmpty().ifBlank { fallbackBarcode }
+        val resolvedId = product?.resolvedOpenFoodFactsId().orEmpty().ifBlank { fallbackBarcode }
         val resolvedName = product?.productName?.trim().orEmpty().ifBlank { "Unnamed product" }
         val resolvedKcal = product?.resolvedKcal()
         val resolvedProt = product?.resolvedProt()
@@ -743,29 +779,34 @@ fun PantryScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (uiState.pantryItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Your pantry is empty.", color = Color.Gray)
-                }
-            } else if (filteredItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No items in this category.", color = Color.Gray)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(
-                        filteredItems,
-                        key = { "${it.openFoodFactsId}_${it.productName}" }
-                    ) { item ->
-                        PantryItemCard(
-                            item = item,
-                            isSaving = uiState.isSaving,
-                            onDeleteRequested = { pendingDeletionItem = item }
-                        )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true)
+            ) {
+                if (uiState.pantryItems.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Your pantry is empty.", color = Color.Gray)
+                    }
+                } else if (filteredItems.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No items in this category.", color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(
+                            filteredItems,
+                            key = { "${it.openFoodFactsId}_${it.productName}" }
+                        ) { item ->
+                            PantryItemCard(
+                                item = item,
+                                isSaving = uiState.isSaving,
+                                onDeleteRequested = { pendingDeletionItem = item }
+                            )
+                        }
                     }
                 }
             }
