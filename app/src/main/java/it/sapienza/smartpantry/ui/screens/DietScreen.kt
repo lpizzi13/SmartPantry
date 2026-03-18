@@ -1,5 +1,6 @@
 package it.sapienza.smartpantry.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,7 @@ import it.sapienza.smartpantry.model.DietViewModel
 
 @Composable
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
+    val context = LocalContext.current
     // Observe global state from ViewModel
     val uiState by dietViewModel.uiState.collectAsState()
 
@@ -177,18 +180,25 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 
             // Content display based on selected diet
             uiState.selectedDiet?.let { diet ->
+                val onAddFoodClick = { dayIndex: Int ->
+                    val intent = Intent(context, SearchFoodActivity::class.java).apply {
+                        putExtra(SearchFoodActivity.EXTRA_UID, uid)
+                    }
+                    context.startActivity(intent)
+                }
+
                 if (diet.isWeekly) {
                     WeeklyDietPlanContent(
                         diet = diet,
                         onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
-                        onAddFood = { dayIndex, foodName -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName) }
+                        onAddFoodClick = onAddFoodClick
                     )
                 } else {
                     NewDietContent(
                         diet = diet,
                         onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
                         onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.id, dayName) },
-                        onAddFood = { dayIndex, foodName -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName) }
+                        onAddFoodClick = onAddFoodClick
                     )
                 }
             } ?: run {
@@ -294,14 +304,14 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 private fun WeeklyDietPlanContent(
     diet: Diet,
     onDayClicked: (Int) -> Unit,
-    onAddFood: (Int, String) -> Unit
+    onAddFoodClick: (Int) -> Unit
 ) {
     diet.days.forEachIndexed { index, dayPlan ->
         DayCard(
             dayPlan = dayPlan,
             isExpanded = diet.expandedDayIndices.contains(index),
             onDayClicked = { onDayClicked(index) },
-            onAddFood = { foodName -> onAddFood(index, foodName) }
+            onAddFoodClick = { onAddFoodClick(index) }
         )
     }
 }
@@ -311,7 +321,7 @@ private fun NewDietContent(
     diet: Diet,
     onDayClicked: (Int) -> Unit,
     onAddDay: (String) -> Unit,
-    onAddFood: (Int, String) -> Unit
+    onAddFoodClick: (Int) -> Unit
 ) {
     var addDayDialogOpen by remember { mutableStateOf(false) }
     var newDayDraft by remember { mutableStateOf("") }
@@ -328,7 +338,7 @@ private fun NewDietContent(
                     dayPlan = dayPlan,
                     isExpanded = diet.expandedDayIndices.contains(index),
                     onDayClicked = { onDayClicked(index) },
-                    onAddFood = { foodName -> onAddFood(index, foodName) }
+                    onAddFoodClick = { onAddFoodClick(index) }
                 )
             }
         }
@@ -380,11 +390,8 @@ private fun DayCard(
     dayPlan: DayPlan,
     isExpanded: Boolean,
     onDayClicked: () -> Unit,
-    onAddFood: (String) -> Unit
+    onAddFoodClick: () -> Unit
 ) {
-    var addFoodDialogOpen by remember { mutableStateOf(false) }
-    var foodDraft by remember { mutableStateOf("") }
-
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -394,7 +401,7 @@ private fun DayCard(
             ) {
                 Text(dayPlan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Row {
-                    IconButton(onClick = { addFoodDialogOpen = true }) {
+                    IconButton(onClick = onAddFoodClick) {
                         Icon(Icons.Default.Add, contentDescription = "Add food")
                     }
                     TextButton(onClick = onDayClicked) {
@@ -414,26 +421,6 @@ private fun DayCard(
                 }
             }
         }
-    }
-
-    if (addFoodDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { addFoodDialogOpen = false },
-            title = { Text("Add Food to ${dayPlan.name}") },
-            text = {
-                OutlinedTextField(value = foodDraft, onValueChange = { foodDraft = it }, singleLine = true, label = { Text("Food name") })
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onAddFood(foodDraft)
-                    foodDraft = ""
-                    addFoodDialogOpen = false
-                }) { Text("Add") }
-            },
-            dismissButton = {
-                TextButton(onClick = { addFoodDialogOpen = false }) { Text("Cancel") }
-            }
-        )
     }
 }
 
