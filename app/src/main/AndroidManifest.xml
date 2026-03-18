@@ -39,7 +39,7 @@
             android:exported="false">
         </activity>
         <activity
-            android:name=".ui.screens.SearchFoodActivity"
+            android:name=".ui.SearchFoodActivity"
             android:exported="false" />
     </application>
 

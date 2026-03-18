@@ -1,6 +1,7 @@
-package it.sapienza.smartpantry.ui.screens
+package it.sapienza.smartpantry.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -71,6 +72,8 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import it.sapienza.smartpantry.model.OpenFoodFactsProduct
 import it.sapienza.smartpantry.model.PantryItem
 import it.sapienza.smartpantry.model.toSearchFood
+import it.sapienza.smartpantry.ui.screens.PantryUiState
+import it.sapienza.smartpantry.ui.screens.PantryViewModel
 import kotlinx.coroutines.flow.collectLatest
 
 class SearchFoodActivity : ComponentActivity() {
@@ -79,11 +82,24 @@ class SearchFoodActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val uid = intent.getStringExtra(EXTRA_UID).orEmpty()
+        val mode = intent.getStringExtra(EXTRA_MODE).orEmpty()
+        val isDietSelection = mode == MODE_DIET
         setContent {
             MaterialTheme {
                 SearchFoodActivityContent(
                     uid = uid,
-                    onClose = { finish() }
+                    isDietSelection = isDietSelection,
+                    onClose = { finish() },
+                    onFoodSelectedForDiet = { name, grams ->
+                        setResult(
+                            RESULT_OK,
+                            Intent().apply {
+                                putExtra(RESULT_FOOD_NAME, name)
+                                putExtra(RESULT_FOOD_GRAMS, grams)
+                            }
+                        )
+                        finish()
+                    }
                 )
             }
         }
@@ -91,6 +107,10 @@ class SearchFoodActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_UID = "search_food_uid"
+        const val EXTRA_MODE = "search_food_mode"
+        const val MODE_DIET = "diet"
+        const val RESULT_FOOD_NAME = "search_food_result_name"
+        const val RESULT_FOOD_GRAMS = "search_food_result_grams"
     }
 }
 
@@ -98,7 +118,9 @@ class SearchFoodActivity : ComponentActivity() {
 @Composable
 private fun SearchFoodActivityContent(
     uid: String,
+    isDietSelection: Boolean,
     onClose: () -> Unit,
+    onFoodSelectedForDiet: (String, Double) -> Unit,
     pantryViewModel: PantryViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -231,6 +253,7 @@ private fun SearchFoodActivityContent(
     if (uiState.isEditorVisible) {
         FoodEditorDialog(
             state = uiState,
+            isDietSelection = isDietSelection,
             isSaving = uiState.isSaving,
             onDismiss = pantryViewModel::dismissEditor,
             onNameChange = pantryViewModel::onEditorNameChange,
@@ -240,7 +263,15 @@ private fun SearchFoodActivityContent(
             onProtChange = pantryViewModel::onEditorProtChange,
             onFatChange = pantryViewModel::onEditorFatChange,
             onPackageWeightGramsChange = pantryViewModel::onEditorPackageWeightGramsChange,
-            onSave = pantryViewModel::saveEditor
+            onSave = {
+                if (isDietSelection) {
+                    pantryViewModel.createDietFoodSelection()?.let { selection ->
+                        onFoodSelectedForDiet(selection.name, selection.grams)
+                    }
+                } else {
+                    pantryViewModel.saveEditor()
+                }
+            }
         )
     }
 }
@@ -360,6 +391,7 @@ private fun SearchResultsSection(
 @Composable
 private fun FoodEditorDialog(
     state: PantryUiState,
+    isDietSelection: Boolean,
     isSaving: Boolean,
     onDismiss: () -> Unit,
     onNameChange: (String) -> Unit,
@@ -391,60 +423,62 @@ private fun FoodEditorDialog(
                     shape = RoundedCornerShape(14.dp),
                     colors = searchFieldColors()
                 )
-                OutlinedTextField(
-                    value = state.editorQuantityInput,
-                    onValueChange = onQuantityChange,
-                    label = { Text("Quantity") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
-                OutlinedTextField(
-                    value = state.editorKcalInput,
-                    onValueChange = onKcalChange,
-                    label = { Text("Kcal") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
-                OutlinedTextField(
-                    value = state.editorCarbsInput,
-                    onValueChange = onCarbsChange,
-                    label = { Text("Carbs") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
-                OutlinedTextField(
-                    value = state.editorProtInput,
-                    onValueChange = onProtChange,
-                    label = { Text("Protein") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
-                OutlinedTextField(
-                    value = state.editorFatInput,
-                    onValueChange = onFatChange,
-                    label = { Text("Fat") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
+                if (!isDietSelection) {
+                    OutlinedTextField(
+                        value = state.editorQuantityInput,
+                        onValueChange = onQuantityChange,
+                        label = { Text("Quantity") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = state.editorKcalInput,
+                        onValueChange = onKcalChange,
+                        label = { Text("Kcal") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = state.editorCarbsInput,
+                        onValueChange = onCarbsChange,
+                        label = { Text("Carbs") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = state.editorProtInput,
+                        onValueChange = onProtChange,
+                        label = { Text("Protein") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                    OutlinedTextField(
+                        value = state.editorFatInput,
+                        onValueChange = onFatChange,
+                        label = { Text("Fat") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                }
                 OutlinedTextField(
                     value = state.editorPackageWeightGramsInput,
                     onValueChange = onPackageWeightGramsChange,
-                    label = { Text("Package weight (g)") },
+                    label = { Text(if (isDietSelection) "Grammage (g)" else "Package weight (g)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -462,7 +496,7 @@ private fun FoodEditorDialog(
                     contentColor = Color.Black
                 )
             ) {
-                Text("Save")
+                Text(if (isDietSelection) "Add to diet" else "Save")
             }
         },
         dismissButton = {

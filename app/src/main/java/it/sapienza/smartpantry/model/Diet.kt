@@ -21,6 +21,19 @@ data class DayPlan(
     val foods: List<String> = emptyList()
 )
 
+private fun formatDietFoodLabel(foodName: String, grams: Double?): String {
+    val normalizedName = foodName.trim()
+    val normalizedGrams = grams
+        ?.takeIf { it.isFinite() && it >= 0.0 }
+        ?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) }
+
+    return if (normalizedGrams != null) {
+        "$normalizedName ($normalizedGrams g)"
+    } else {
+        normalizedName
+    }
+}
+
 /**
  * Rappresenta una Dieta.
  */
@@ -182,14 +195,19 @@ class DietViewModel : ViewModel() {
         }
     }
 
-    fun addFoodToDay(dietId: String, dayIndex: Int, foodName: String) {
+    fun addFoodToDay(dietId: String, dayIndex: Int, foodName: String, grams: Double? = null) {
         val trimmedFood = foodName.trim()
         if (trimmedFood.isBlank()) return
+        val formattedFood = formatDietFoodLabel(trimmedFood, grams)
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
                     val updatedDays = diet.days.mapIndexed { index, dayPlan ->
-                        if (index == dayIndex) dayPlan.copy(foods = dayPlan.foods + trimmedFood) else dayPlan
+                        if (index == dayIndex) {
+                            dayPlan.copy(foods = dayPlan.foods + formattedFood)
+                        } else {
+                            dayPlan
+                        }
                     }
                     diet.copy(days = updatedDays, expandedDayIndices = diet.expandedDayIndices + dayIndex)
                 } else diet

@@ -1,6 +1,9 @@
 package it.sapienza.smartpantry.ui.screens
 
+import android.app.Activity
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DayPlan
 import it.sapienza.smartpantry.model.Diet
 import it.sapienza.smartpantry.model.DietViewModel
+import it.sapienza.smartpantry.ui.SearchFoodActivity
 
 @Composable
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
@@ -61,6 +65,27 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
     // LOCAL STATE: Manages warning for Weekly/Custom mode change
     var showWeeklyWarning by remember { mutableStateOf(false) }
     var pendingWeeklyToggle by remember { mutableStateOf(false) }
+    var pendingFoodSelectionTarget by remember { mutableStateOf<Pair<String, Int>?>(null) }
+
+    val searchFoodLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val target = pendingFoodSelectionTarget
+        pendingFoodSelectionTarget = null
+        if (result.resultCode != Activity.RESULT_OK || target == null) return@rememberLauncherForActivityResult
+
+        val resultIntent = result.data ?: return@rememberLauncherForActivityResult
+        val foodName = resultIntent.getStringExtra(SearchFoodActivity.RESULT_FOOD_NAME).orEmpty()
+        val foodGrams = resultIntent.getDoubleExtra(SearchFoodActivity.RESULT_FOOD_GRAMS, 0.0)
+        if (foodName.isBlank()) return@rememberLauncherForActivityResult
+
+        dietViewModel.addFoodToDay(
+            dietId = target.first,
+            dayIndex = target.second,
+            foodName = foodName,
+            grams = foodGrams
+        )
+    }
 
     // Initialize ViewModel with user ID
     LaunchedEffect(uid) {
@@ -181,10 +206,12 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             // Content display based on selected diet
             uiState.selectedDiet?.let { diet ->
                 val onAddFoodClick = { dayIndex: Int ->
+                    pendingFoodSelectionTarget = diet.id to dayIndex
                     val intent = Intent(context, SearchFoodActivity::class.java).apply {
                         putExtra(SearchFoodActivity.EXTRA_UID, uid)
+                        putExtra(SearchFoodActivity.EXTRA_MODE, SearchFoodActivity.MODE_DIET)
                     }
-                    context.startActivity(intent)
+                    searchFoodLauncher.launch(intent)
                 }
 
                 if (diet.isWeekly) {

@@ -94,6 +94,11 @@ data class PantryUiState(
     val editorPackageWeightGramsInput: String = "0"
 )
 
+data class DietFoodSelection(
+    val name: String,
+    val grams: Double
+)
+
 class PantryViewModel : ViewModel() {
     data class BarcodeResolution(
         val openFoodFactsId: String? = null,
@@ -322,6 +327,24 @@ class PantryViewModel : ViewModel() {
                 _uiState.update { it.copy(isSaving = false) }
             }
         }
+    }
+
+    fun createDietFoodSelection(): DietFoodSelection? {
+        val state = _uiState.value
+        val name = state.editorNameInput.trim()
+        if (name.isBlank()) {
+            emitEvent("Food name is required.")
+            return null
+        }
+
+        val grams = parseMacroOrNull(state.editorPackageWeightGramsInput, "Grammage (g)")
+            ?: return null
+        if (grams <= 0.0) {
+            emitEvent("Grammage must be greater than 0.")
+            return null
+        }
+
+        return DietFoodSelection(name = name, grams = grams)
     }
 
     fun handleScannedBarcode(scannedCode: String) {
