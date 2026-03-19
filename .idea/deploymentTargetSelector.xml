@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="app">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-03-03T16:24:39.666168300Z">
+        <DropdownSelection timestamp="2026-03-19T10:07:56.711965251Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=RKVCDQVSNZTOKJJJ" />
+              <DeviceId pluginId="LocalEmulator" identifier="path=/home/dans/.config/.android/avd/Medium_Phone.avd" />
             </handle>
           </Target>
         </DropdownSelection>

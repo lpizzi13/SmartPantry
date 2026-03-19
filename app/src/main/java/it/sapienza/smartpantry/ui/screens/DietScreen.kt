@@ -1,9 +1,5 @@
 package it.sapienza.smartpantry.ui.screens
 
-import android.app.Activity
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -35,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -43,11 +40,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DayPlan
 import it.sapienza.smartpantry.model.Diet
 import it.sapienza.smartpantry.model.DietViewModel
-import it.sapienza.smartpantry.ui.SearchFoodActivity
 
 @Composable
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
-    val context = LocalContext.current
     // Observe global state from ViewModel
     val uiState by dietViewModel.uiState.collectAsState()
 
@@ -65,27 +60,6 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
     // LOCAL STATE: Manages warning for Weekly/Custom mode change
     var showWeeklyWarning by remember { mutableStateOf(false) }
     var pendingWeeklyToggle by remember { mutableStateOf(false) }
-    var pendingFoodSelectionTarget by remember { mutableStateOf<Pair<String, Int>?>(null) }
-
-    val searchFoodLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val target = pendingFoodSelectionTarget
-        pendingFoodSelectionTarget = null
-        if (result.resultCode != Activity.RESULT_OK || target == null) return@rememberLauncherForActivityResult
-
-        val resultIntent = result.data ?: return@rememberLauncherForActivityResult
-        val foodName = resultIntent.getStringExtra(SearchFoodActivity.RESULT_FOOD_NAME).orEmpty()
-        val foodGrams = resultIntent.getDoubleExtra(SearchFoodActivity.RESULT_FOOD_GRAMS, 0.0)
-        if (foodName.isBlank()) return@rememberLauncherForActivityResult
-
-        dietViewModel.addFoodToDay(
-            dietId = target.first,
-            dayIndex = target.second,
-            foodName = foodName,
-            grams = foodGrams
-        )
-    }
 
     // Initialize ViewModel with user ID
     LaunchedEffect(uid) {
@@ -189,7 +163,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                             Switch(
                                 checked = diet.isWeekly,
                                 onCheckedChange = { isChecked ->
-                                    val hasFoods = diet.days.any { it.foods.isNotEmpty() }
+                                    val hasFoods = diet.days.any { it.breakfast.isNotEmpty() || it.lunch.isNotEmpty() || it.dinner.isNotEmpty() || it.snacks.isNotEmpty() }
                                     if (hasFoods) {
                                         pendingWeeklyToggle = isChecked
                                         showWeeklyWarning = true
@@ -205,27 +179,22 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 
             // Content display based on selected diet
             uiState.selectedDiet?.let { diet ->
-                val onAddFoodClick = { dayIndex: Int ->
-                    pendingFoodSelectionTarget = diet.id to dayIndex
-                    val intent = Intent(context, SearchFoodActivity::class.java).apply {
-                        putExtra(SearchFoodActivity.EXTRA_UID, uid)
-                        putExtra(SearchFoodActivity.EXTRA_MODE, SearchFoodActivity.MODE_DIET)
-                    }
-                    searchFoodLauncher.launch(intent)
-                }
-
                 if (diet.isWeekly) {
                     WeeklyDietPlanContent(
                         diet = diet,
                         onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
-                        onAddFoodClick = onAddFoodClick
+                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName, mealType) },
+                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.id, dayIndex, mealType, foodIndex, newName) },
+                        onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.id, dayIndex, mealType, foodIndex) }
                     )
                 } else {
                     NewDietContent(
                         diet = diet,
                         onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
                         onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.id, dayName) },
-                        onAddFoodClick = onAddFoodClick
+                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName, mealType) },
+                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.id, dayIndex, mealType, foodIndex, newName) },
+                        onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.id, dayIndex, mealType, foodIndex) }
                     )
                 }
             } ?: run {
@@ -331,14 +300,18 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 private fun WeeklyDietPlanContent(
     diet: Diet,
     onDayClicked: (Int) -> Unit,
-    onAddFoodClick: (Int) -> Unit
+    onAddFood: (Int, String, String) -> Unit,
+    onEditFood: (Int, String, Int, String) -> Unit,
+    onRemoveFood: (Int, String, Int) -> Unit
 ) {
     diet.days.forEachIndexed { index, dayPlan ->
         DayCard(
             dayPlan = dayPlan,
             isExpanded = diet.expandedDayIndices.contains(index),
             onDayClicked = { onDayClicked(index) },
-            onAddFoodClick = { onAddFoodClick(index) }
+            onAddFood = { foodName, mealType -> onAddFood(index, foodName, mealType) },
+            onEditFood = { mealType, fIdx, newName -> onEditFood(index, mealType, fIdx, newName) },
+            onRemoveFood = { mealType, fIdx -> onRemoveFood(index, mealType, fIdx) }
         )
     }
 }
@@ -348,7 +321,9 @@ private fun NewDietContent(
     diet: Diet,
     onDayClicked: (Int) -> Unit,
     onAddDay: (String) -> Unit,
-    onAddFoodClick: (Int) -> Unit
+    onAddFood: (Int, String, String) -> Unit,
+    onEditFood: (Int, String, Int, String) -> Unit,
+    onRemoveFood: (Int, String, Int) -> Unit
 ) {
     var addDayDialogOpen by remember { mutableStateOf(false) }
     var newDayDraft by remember { mutableStateOf("") }
@@ -365,7 +340,9 @@ private fun NewDietContent(
                     dayPlan = dayPlan,
                     isExpanded = diet.expandedDayIndices.contains(index),
                     onDayClicked = { onDayClicked(index) },
-                    onAddFoodClick = { onAddFoodClick(index) }
+                    onAddFood = { foodName, mealType -> onAddFood(index, foodName, mealType) },
+                    onEditFood = { mealType, fIdx, newName -> onEditFood(index, mealType, fIdx, newName) },
+                    onRemoveFood = { mealType, fIdx -> onRemoveFood(index, mealType, fIdx) }
                 )
             }
         }
@@ -412,13 +389,27 @@ private fun NewDietContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DayCard(
     dayPlan: DayPlan,
     isExpanded: Boolean,
     onDayClicked: () -> Unit,
-    onAddFoodClick: () -> Unit
+    onAddFood: (String, String) -> Unit,
+    onEditFood: (String, Int, String) -> Unit,
+    onRemoveFood: (String, Int) -> Unit
 ) {
+    var addFoodDialogOpen by remember { mutableStateOf(false) }
+    var foodDraft by remember { mutableStateOf("") }
+    var selectedMealType by remember { mutableStateOf("Colazione") }
+    val mealTypes = listOf("Colazione", "Pranzo", "Cena", "Snacks")
+    var mealTypeExpanded by remember { mutableStateOf(false) }
+
+    // State for editing food
+    var editFoodDialogOpen by remember { mutableStateOf(false) }
+    var foodToEdit by remember { mutableStateOf<Triple<String, Int, String>?>(null) } // MealType, Index, CurrentName
+    var editFoodDraft by remember { mutableStateOf("") }
+
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -428,7 +419,7 @@ private fun DayCard(
             ) {
                 Text(dayPlan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Row {
-                    IconButton(onClick = onAddFoodClick) {
+                    IconButton(onClick = { addFoodDialogOpen = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add food")
                     }
                     TextButton(onClick = onDayClicked) {
@@ -439,11 +430,155 @@ private fun DayCard(
             
             if (isExpanded) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-                if (dayPlan.foods.isEmpty()) {
-                    Text("No foods added.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    dayPlan.foods.forEach { food ->
-                        Text("• $food", modifier = Modifier.padding(vertical = 2.dp))
+                
+                MealSection("Colazione", dayPlan.breakfast, onEdit = { idx, name -> 
+                    foodToEdit = Triple("Colazione", idx, name)
+                    editFoodDraft = name
+                    editFoodDialogOpen = true
+                }, onRemove = { idx -> onRemoveFood("Colazione", idx) })
+                
+                MealSection("Pranzo", dayPlan.lunch, onEdit = { idx, name -> 
+                    foodToEdit = Triple("Pranzo", idx, name)
+                    editFoodDraft = name
+                    editFoodDialogOpen = true
+                }, onRemove = { idx -> onRemoveFood("Pranzo", idx) })
+                
+                MealSection("Cena", dayPlan.dinner, onEdit = { idx, name -> 
+                    foodToEdit = Triple("Cena", idx, name)
+                    editFoodDraft = name
+                    editFoodDialogOpen = true
+                }, onRemove = { idx -> onRemoveFood("Cena", idx) })
+                
+                MealSection("Snacks", dayPlan.snacks, onEdit = { idx, name -> 
+                    foodToEdit = Triple("Snacks", idx, name)
+                    editFoodDraft = name
+                    editFoodDialogOpen = true
+                }, onRemove = { idx -> onRemoveFood("Snacks", idx) })
+                
+                if (dayPlan.breakfast.isEmpty() && dayPlan.lunch.isEmpty() && dayPlan.dinner.isEmpty() && dayPlan.snacks.isEmpty()) {
+                    Text("No foods added.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+
+    if (addFoodDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { addFoodDialogOpen = false },
+            title = { Text("Add Food to ${dayPlan.name}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExposedDropdownMenuBox(
+                        expanded = mealTypeExpanded,
+                        onExpandedChange = { mealTypeExpanded = !mealTypeExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedMealType,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Meal") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = mealTypeExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = mealTypeExpanded,
+                            onDismissRequest = { mealTypeExpanded = false }
+                        ) {
+                            mealTypes.forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type) },
+                                    onClick = {
+                                        selectedMealType = type
+                                        mealTypeExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = foodDraft,
+                        onValueChange = { foodDraft = it },
+                        singleLine = true,
+                        label = { Text("Food name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onAddFood(foodDraft, selectedMealType)
+                    foodDraft = ""
+                    addFoodDialogOpen = false
+                }) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = { addFoodDialogOpen = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (editFoodDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { editFoodDialogOpen = false },
+            title = { Text("Edit Food") },
+            text = {
+                OutlinedTextField(
+                    value = editFoodDraft,
+                    onValueChange = { editFoodDraft = it },
+                    singleLine = true,
+                    label = { Text("Food name") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    foodToEdit?.let { (mealType, idx, _) ->
+                        onEditFood(mealType, idx, editFoodDraft)
+                    }
+                    editFoodDialogOpen = false
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editFoodDialogOpen = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+fun MealSection(title: String, foods: List<String>, onEdit: (Int, String) -> Unit, onRemove: (Int) -> Unit) {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (foods.isEmpty()) {
+            Text(
+                text = "Empty",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        } else {
+            foods.forEachIndexed { index, food ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "• $food",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row {
+                        IconButton(onClick = { onEdit(index, food) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = { onRemove(index) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Remove", modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
             }

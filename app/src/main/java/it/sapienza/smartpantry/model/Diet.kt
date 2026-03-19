@@ -14,25 +14,15 @@ import retrofit2.Response
 import java.util.UUID
 
 /**
- * Rappresenta il piano alimentare di un singolo giorno.
+ * Rappresenta il piano alimentare di un singolo giorno con le sezioni per i pasti.
  */
 data class DayPlan(
     val name: String,
-    val foods: List<String> = emptyList()
+    val breakfast: List<String> = emptyList(),
+    val lunch: List<String> = emptyList(),
+    val dinner: List<String> = emptyList(),
+    val snacks: List<String> = emptyList()
 )
-
-private fun formatDietFoodLabel(foodName: String, grams: Double?): String {
-    val normalizedName = foodName.trim()
-    val normalizedGrams = grams
-        ?.takeIf { it.isFinite() && it >= 0.0 }
-        ?.let { if (it % 1.0 == 0.0) it.toInt().toString() else "%.1f".format(it) }
-
-    return if (normalizedGrams != null) {
-        "$normalizedName ($normalizedGrams g)"
-    } else {
-        normalizedName
-    }
-}
 
 /**
  * Rappresenta una Dieta.
@@ -102,7 +92,7 @@ class DietViewModel : ViewModel() {
             override fun onResponse(call: Call<DietResponse>, response: Response<DietResponse>) {
                 if (!response.isSuccessful) return
                 val remoteDietData = response.body()?.dietData
-                val remoteDiets = remoteDietData?.diets.orEmpty()
+                val remoteDiets = remoteDietData?.diets ?: emptyList()
                 
                 // Priorità di selezione: 1. Dieta preferita, 2. selectedDietId dal backend, 3. Prima dieta della lista
                 val favoriteDietId = remoteDiets.find { it.isFavorite }?.id
@@ -188,28 +178,77 @@ class DietViewModel : ViewModel() {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
-                    diet.copy(days = diet.days + DayPlan(trimmedDayName))
+                    diet.copy(days = (diet.days ?: emptyList()) + DayPlan(trimmedDayName))
                 } else diet
             }
             state.copy(diets = updatedDiets)
         }
     }
 
-    fun addFoodToDay(dietId: String, dayIndex: Int, foodName: String, grams: Double? = null) {
+    fun addFoodToDay(dietId: String, dayIndex: Int, foodName: String, mealType: String = "Breakfast") {
         val trimmedFood = foodName.trim()
         if (trimmedFood.isBlank()) return
-        val formattedFood = formatDietFoodLabel(trimmedFood, grams)
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
                     val updatedDays = diet.days.mapIndexed { index, dayPlan ->
                         if (index == dayIndex) {
-                            dayPlan.copy(foods = dayPlan.foods + formattedFood)
-                        } else {
-                            dayPlan
-                        }
+                            when (mealType) {
+                                "Breakfast", "Colazione" -> dayPlan.copy(breakfast = (dayPlan.breakfast ?: emptyList()) + trimmedFood)
+                                "Lunch", "Pranzo" -> dayPlan.copy(lunch = (dayPlan.lunch ?: emptyList()) + trimmedFood)
+                                "Dinner", "Cena" -> dayPlan.copy(dinner = (dayPlan.dinner ?: emptyList()) + trimmedFood)
+                                "Snacks", "Spuntini" -> dayPlan.copy(snacks = (dayPlan.snacks ?: emptyList()) + trimmedFood)
+                                else -> dayPlan.copy(breakfast = (dayPlan.breakfast ?: emptyList()) + trimmedFood)
+                            }
+                        } else dayPlan
                     }
                     diet.copy(days = updatedDays, expandedDayIndices = diet.expandedDayIndices + dayIndex)
+                } else diet
+            }
+            state.copy(diets = updatedDiets)
+        }
+    }
+
+    fun editFoodInDay(dietId: String, dayIndex: Int, mealType: String, foodIndex: Int, newFoodName: String) {
+        val trimmedFood = newFoodName.trim()
+        if (trimmedFood.isBlank()) return
+        updatePersistentState { state ->
+            val updatedDiets = state.diets.map { diet ->
+                if (diet.id == dietId) {
+                    val updatedDays = diet.days.mapIndexed { dIdx, dayPlan ->
+                        if (dIdx == dayIndex) {
+                            when (mealType) {
+                                "Breakfast", "Colazione" -> dayPlan.copy(breakfast = dayPlan.breakfast.toMutableList().apply { this[foodIndex] = trimmedFood })
+                                "Lunch", "Pranzo" -> dayPlan.copy(lunch = dayPlan.lunch.toMutableList().apply { this[foodIndex] = trimmedFood })
+                                "Dinner", "Cena" -> dayPlan.copy(dinner = dayPlan.dinner.toMutableList().apply { this[foodIndex] = trimmedFood })
+                                "Snacks", "Spuntini" -> dayPlan.copy(snacks = dayPlan.snacks.toMutableList().apply { this[foodIndex] = trimmedFood })
+                                else -> dayPlan
+                            }
+                        } else dayPlan
+                    }
+                    diet.copy(days = updatedDays)
+                } else diet
+            }
+            state.copy(diets = updatedDiets)
+        }
+    }
+
+    fun removeFoodFromDay(dietId: String, dayIndex: Int, mealType: String, foodIndex: Int) {
+        updatePersistentState { state ->
+            val updatedDiets = state.diets.map { diet ->
+                if (diet.id == dietId) {
+                    val updatedDays = diet.days.mapIndexed { dIdx, dayPlan ->
+                        if (dIdx == dayIndex) {
+                            when (mealType) {
+                                "Breakfast", "Colazione" -> dayPlan.copy(breakfast = dayPlan.breakfast.toMutableList().apply { removeAt(foodIndex) })
+                                "Lunch", "Pranzo" -> dayPlan.copy(lunch = dayPlan.lunch.toMutableList().apply { removeAt(foodIndex) })
+                                "Dinner", "Cena" -> dayPlan.copy(dinner = dayPlan.dinner.toMutableList().apply { removeAt(foodIndex) })
+                                "Snacks", "Spuntini" -> dayPlan.copy(snacks = dayPlan.snacks.toMutableList().apply { removeAt(foodIndex) })
+                                else -> dayPlan
+                            }
+                        } else dayPlan
+                    }
+                    diet.copy(days = updatedDays)
                 } else diet
             }
             state.copy(diets = updatedDiets)
