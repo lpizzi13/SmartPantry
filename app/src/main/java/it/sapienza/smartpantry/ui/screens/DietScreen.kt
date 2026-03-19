@@ -61,6 +61,9 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
     var showWeeklyWarning by remember { mutableStateOf(false) }
     var pendingWeeklyToggle by remember { mutableStateOf(false) }
 
+    // LOCAL STATE: Dialog for deleting diet
+    var dietToDelete by remember { mutableStateOf<Diet?>(null) }
+
     // Initialize ViewModel with user ID
     LaunchedEffect(uid) {
         if (uid.isNotBlank()) {
@@ -124,17 +127,33 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                                     menuExpanded = false
                                 },
                                 trailingIcon = {
-                                    IconButton(
-                                        onClick = {
-                                            renameDraft = diet.name
-                                            renameDialogOpen = diet
-                                            menuExpanded = false
+                                    Row {
+                                        IconButton(
+                                            onClick = {
+                                                renameDraft = diet.name
+                                                renameDialogOpen = diet
+                                                menuExpanded = false
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Edit,
+                                                contentDescription = "Rename diet",
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Edit,
-                                            contentDescription = "Rename diet"
-                                        )
+                                        IconButton(
+                                            onClick = {
+                                                dietToDelete = diet
+                                                menuExpanded = false
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = "Delete diet",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                     }
                                 }
                             )
@@ -291,6 +310,26 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             },
             dismissButton = {
                 TextButton(onClick = { addDietDialogOpen = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    dietToDelete?.let { diet ->
+        AlertDialog(
+            onDismissRequest = { dietToDelete = null },
+            title = { Text("Delete Diet") },
+            text = { Text("Are you sure you want to delete '${diet.name}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        dietViewModel.deleteDiet(diet.id)
+                        dietToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dietToDelete = null }) { Text("Cancel") }
             }
         )
     }

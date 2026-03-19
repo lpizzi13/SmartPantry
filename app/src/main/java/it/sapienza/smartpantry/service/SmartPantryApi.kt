@@ -16,6 +16,9 @@ interface SmartPantryApi {
     @POST("save-diet")
     fun saveDiet(@Body request: SaveDietRequest): Call<SaveDietResponse>
 
+    @POST("delete-diet")
+    fun deleteDiet(@Body request: DeleteDietRequest): Call<DeleteDietResponse>
+
     @POST("register-user")
     fun registerUser(@Body request: RegisterRequest): Call<UserResponse>
 

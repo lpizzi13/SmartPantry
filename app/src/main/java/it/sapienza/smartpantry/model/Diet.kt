@@ -66,11 +66,17 @@ data class SaveDietRequest(
     @SerializedName("uid") val uid: String,
     @SerializedName("dietData") val dietData: DietPayload
 )
+data class DeleteDietRequest(
+    @SerializedName("uid") val uid: String,
+    @SerializedName("duid") val duid: String,
+    @SerializedName("selectedId") val selectedId: String?
+)
 data class DietResponse(
     @SerializedName("status") val status: String = "",
     @SerializedName("dietData") val dietData: DietPayload? = null
 )
 data class SaveDietResponse(@SerializedName("status") val status: String = "")
+data class DeleteDietResponse(@SerializedName("status") val status: String = "")
 
 class DietViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(DietUiState())
@@ -162,6 +168,30 @@ class DietViewModel : ViewModel() {
         }
     }
 
+    fun deleteDiet(dietId: String) {
+        val uid = currentUid ?: return
+        val currentState = _uiState.value
+        val updatedDiets = currentState.diets.filter { it.id != dietId }
+        val newSelectedId = if (currentState.selectedDietId == dietId) {
+            updatedDiets.firstOrNull()?.id
+        } else {
+            currentState.selectedDietId
+        }
+
+        // Chiamata API esplicita per la cancellazione
+        val request = DeleteDietRequest(uid, dietId, newSelectedId)
+        RetrofitClient.instance.deleteDiet(request).enqueue(object : Callback<DeleteDietResponse> {
+            override fun onResponse(call: Call<DeleteDietResponse>, response: Response<DeleteDietResponse>) {
+                if (response.isSuccessful) {
+                    _uiState.update { it.copy(diets = updatedDiets, selectedDietId = newSelectedId) }
+                }
+            }
+            override fun onFailure(call: Call<DeleteDietResponse>, t: Throwable) {
+                Log.e("DIET_DELETE", "Failure: ${t.message}")
+            }
+        })
+    }
+
     fun addNewDiet(name: String) {
         val trimmedName = name.trim()
         if (trimmedName.isBlank()) return
@@ -178,7 +208,7 @@ class DietViewModel : ViewModel() {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
                 if (diet.id == dietId) {
-                    diet.copy(days = (diet.days ?: emptyList()) + DayPlan(trimmedDayName))
+                    diet.copy(days = diet.days + DayPlan(trimmedDayName))
                 } else diet
             }
             state.copy(diets = updatedDiets)
@@ -194,11 +224,11 @@ class DietViewModel : ViewModel() {
                     val updatedDays = diet.days.mapIndexed { index, dayPlan ->
                         if (index == dayIndex) {
                             when (mealType) {
-                                "Breakfast", "Colazione" -> dayPlan.copy(breakfast = (dayPlan.breakfast ?: emptyList()) + trimmedFood)
-                                "Lunch", "Pranzo" -> dayPlan.copy(lunch = (dayPlan.lunch ?: emptyList()) + trimmedFood)
-                                "Dinner", "Cena" -> dayPlan.copy(dinner = (dayPlan.dinner ?: emptyList()) + trimmedFood)
-                                "Snacks", "Spuntini" -> dayPlan.copy(snacks = (dayPlan.snacks ?: emptyList()) + trimmedFood)
-                                else -> dayPlan.copy(breakfast = (dayPlan.breakfast ?: emptyList()) + trimmedFood)
+                                "Breakfast", "Colazione" -> dayPlan.copy(breakfast = dayPlan.breakfast + trimmedFood)
+                                "Lunch", "Pranzo" -> dayPlan.copy(lunch = dayPlan.lunch + trimmedFood)
+                                "Dinner", "Cena" -> dayPlan.copy(dinner = dayPlan.dinner + trimmedFood)
+                                "Snacks", "Spuntini" -> dayPlan.copy(snacks = dayPlan.snacks + trimmedFood)
+                                else -> dayPlan.copy(breakfast = dayPlan.breakfast + trimmedFood)
                             }
                         } else dayPlan
                     }
