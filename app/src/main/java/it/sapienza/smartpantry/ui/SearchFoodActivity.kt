@@ -1,4 +1,4 @@
-package it.sapienza.smartpantry.ui.screens
+package it.sapienza.smartpantry.ui
 
 import android.app.Activity
 import android.os.Bundle
@@ -71,6 +71,8 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import it.sapienza.smartpantry.model.OpenFoodFactsProduct
 import it.sapienza.smartpantry.model.PantryItem
 import it.sapienza.smartpantry.model.toSearchFood
+import it.sapienza.smartpantry.ui.screens.PantryUiState
+import it.sapienza.smartpantry.ui.screens.PantryViewModel
 import kotlinx.coroutines.flow.collectLatest
 
 class SearchFoodActivity : ComponentActivity() {

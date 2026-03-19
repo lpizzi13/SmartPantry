@@ -34,7 +34,6 @@ import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
-import it.sapienza.smartpantry.ui.screens.SearchFoodActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
