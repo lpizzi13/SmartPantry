@@ -2,7 +2,6 @@ package it.sapienza.smartpantry.model
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
-import com.google.gson.annotations.SerializedName
 import it.sapienza.smartpantry.service.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,9 +12,18 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.util.UUID
 
-/**
- * Rappresenta il piano alimentare di un singolo giorno con le sezioni per i pasti.
- */
+// --- DATA MODELS ---
+
+data class Diet(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val isWeekly: Boolean = false,
+    val isFavorite: Boolean = false,
+    val days: List<DayPlan> = emptyList(),
+    // NEW: Keeps track of which days are expanded in the UI
+    val expandedDayIndices: Set<Int> = emptySet()
+)
+
 data class DayPlan(
     val name: String,
     val breakfast: List<String> = emptyList(),
@@ -24,59 +32,38 @@ data class DayPlan(
     val snacks: List<String> = emptyList()
 )
 
-/**
- * Rappresenta una Dieta.
- */
-data class Diet(
-    // DUID univoco della dieta. Compatibile con payload legacy che usavano "id"/"DUID".
-    @SerializedName(value = "duid", alternate = ["id", "DUID"])
-    val duid: String = UUID.randomUUID().toString(),
-    val name: String,
-    val days: List<DayPlan> = emptyList(),
-    val expandedDayIndices: Set<Int> = emptySet(),
-    val isWeekly: Boolean = false,
-    val isFavorite: Boolean = false
+// --- API REQUEST/RESPONSE MODELS ---
+
+data class DietRequest(val uid: String)
+data class DietResponse(val status: String, val dietData: DietData?)
+data class DietData(val diets: List<Diet>, val selectedDietId: String?)
+
+data class SaveDietRequest(val uid: String, val dietData: DietPayload)
+data class DietPayload(val diets: List<Diet>, val selectedDietId: String?)
+data class SaveDietResponse(val status: String)
+
+data class DeleteDietRequest(val uid: String, val dietId: String, val newSelectedId: String?)
+data class DeleteDietResponse(val status: String)
+
+// --- VIEWMODEL STATE ---
+
+data class DietUiState(
+    val diets: List<Diet> = emptyList(),
+    val selectedDietId: String? = null
 ) {
-    val id: String
-        get() = duid
+    val selectedDiet: Diet? get() = diets.find { it.id == selectedDietId }
 }
+
+// --- DEFAULTS ---
 
 object DietDefaults {
     val weekDays = listOf(
-        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
-    ).map { DayPlan(it) }
-
-    fun initialDiets(): List<Diet> = emptyList()
+        DayPlan("Monday"), DayPlan("Tuesday"), DayPlan("Wednesday"),
+        DayPlan("Thursday"), DayPlan("Friday"), DayPlan("Saturday"), DayPlan("Sunday")
+    )
 }
 
-data class DietUiState(
-    val diets: List<Diet> = DietDefaults.initialDiets(),
-    val selectedDietId: String? = null
-) {
-    val selectedDiet: Diet?
-        get() = diets.find { it.id == selectedDietId }
-}
-
-data class DietRequest(@SerializedName("uid") val uid: String)
-data class DietPayload(
-    @SerializedName("diets") val diets: List<Diet> = emptyList(),
-    @SerializedName("selectedDietId") val selectedDietId: String? = null
-)
-data class SaveDietRequest(
-    @SerializedName("uid") val uid: String,
-    @SerializedName("dietData") val dietData: DietPayload
-)
-data class DeleteDietRequest(
-    @SerializedName("uid") val uid: String,
-    @SerializedName("duid") val duid: String,
-    @SerializedName("selectedId") val selectedId: String?
-)
-data class DietResponse(
-    @SerializedName("status") val status: String = "",
-    @SerializedName("dietData") val dietData: DietPayload? = null
-)
-data class SaveDietResponse(@SerializedName("status") val status: String = "")
-data class DeleteDietResponse(@SerializedName("status") val status: String = "")
+// --- VIEWMODEL ---
 
 class DietViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(DietUiState())
@@ -88,9 +75,13 @@ class DietViewModel : ViewModel() {
     }
 
     fun initialize(uid: String) {
-        if (uid.isBlank() || currentUid == uid) return
+        if (uid.isBlank()) return
         currentUid = uid
         loadDiet(uid)
+    }
+
+    fun refreshDiet() {
+        currentUid?.let { loadDiet(it) }
     }
 
     private fun loadDiet(uid: String) {

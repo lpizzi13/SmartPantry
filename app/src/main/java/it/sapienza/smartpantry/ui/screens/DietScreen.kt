@@ -23,19 +23,16 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DayPlan
 import it.sapienza.smartpantry.model.Diet
@@ -45,6 +42,22 @@ import it.sapienza.smartpantry.model.DietViewModel
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
     // Observe global state from ViewModel
     val uiState by dietViewModel.uiState.collectAsState()
+
+    // Lifecycle observer to refresh data when screen is resumed (navigated back to)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (uid.isNotBlank()) {
+                    dietViewModel.initialize(uid)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // LOCAL STATE: Manages opening/closing of the diet dropdown menu
     var menuExpanded by remember { mutableStateOf(false) }
@@ -63,13 +76,6 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 
     // LOCAL STATE: Dialog for deleting diet
     var dietToDelete by remember { mutableStateOf<Diet?>(null) }
-
-    // Initialize ViewModel with user ID
-    LaunchedEffect(uid) {
-        if (uid.isNotBlank()) {
-            dietViewModel.initialize(uid)
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -344,13 +350,13 @@ private fun WeeklyDietPlanContent(
     onRemoveFood: (Int, String, Int) -> Unit
 ) {
     diet.days.forEachIndexed { index, dayPlan ->
-        DayCard(
+        DayPlanItem(
             dayPlan = dayPlan,
             isExpanded = diet.expandedDayIndices.contains(index),
-            onDayClicked = { onDayClicked(index) },
-            onAddFood = { foodName, mealType -> onAddFood(index, foodName, mealType) },
-            onEditFood = { mealType, fIdx, newName -> onEditFood(index, mealType, fIdx, newName) },
-            onRemoveFood = { mealType, fIdx -> onRemoveFood(index, mealType, fIdx) }
+            onToggleExpand = { onDayClicked(index) },
+            onAddFood = { food, meal -> onAddFood(index, food, meal) },
+            onEditFood = { meal, fIdx, newName -> onEditFood(index, meal, fIdx, newName) },
+            onRemoveFood = { meal, fIdx -> onRemoveFood(index, meal, fIdx) }
         )
     }
 }
@@ -364,269 +370,183 @@ private fun NewDietContent(
     onEditFood: (Int, String, Int, String) -> Unit,
     onRemoveFood: (Int, String, Int) -> Unit
 ) {
-    var addDayDialogOpen by remember { mutableStateOf(false) }
-    var newDayDraft by remember { mutableStateOf("") }
+    var showAddDayDialog by remember { mutableStateOf(false) }
+    var newDayName by remember { mutableStateOf("") }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            diet.days.forEachIndexed { index, dayPlan ->
-                DayCard(
-                    dayPlan = dayPlan,
-                    isExpanded = diet.expandedDayIndices.contains(index),
-                    onDayClicked = { onDayClicked(index) },
-                    onAddFood = { foodName, mealType -> onAddFood(index, foodName, mealType) },
-                    onEditFood = { mealType, fIdx, newName -> onEditFood(index, mealType, fIdx, newName) },
-                    onRemoveFood = { mealType, fIdx -> onRemoveFood(index, mealType, fIdx) }
-                )
-            }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        diet.days.forEachIndexed { index, dayPlan ->
+            DayPlanItem(
+                dayPlan = dayPlan,
+                isExpanded = diet.expandedDayIndices.contains(index),
+                onToggleExpand = { onDayClicked(index) },
+                onAddFood = { food, meal -> onAddFood(index, food, meal) },
+                onEditFood = { meal, fIdx, newName -> onEditFood(index, meal, fIdx, newName) },
+                onRemoveFood = { meal, fIdx -> onRemoveFood(index, meal, fIdx) }
+            )
         }
 
-        // Floating button to add days - MOVED TO LEFT
-        FloatingActionButton(
-            onClick = {
-                val nextDayNumber = diet.days.count { it.name.startsWith("Day ") } + 1
-                newDayDraft = "Day $nextDayNumber"
-                addDayDialogOpen = true
-            },
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(16.dp)
+        Button(
+            onClick = { showAddDayDialog = true },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Add day")
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Add custom day")
         }
     }
 
-    if (addDayDialogOpen) {
+    if (showAddDayDialog) {
         AlertDialog(
-            onDismissRequest = { addDayDialogOpen = false },
-            title = { Text("Add day") },
+            onDismissRequest = { showAddDayDialog = false },
+            title = { Text("Add Day") },
             text = {
                 OutlinedTextField(
-                    value = newDayDraft,
-                    onValueChange = { newDayDraft = it },
-                    singleLine = true,
-                    label = { Text("Day name") }
+                    value = newDayName,
+                    onValueChange = { newDayName = it },
+                    label = { Text("Day Name (e.g., Day 1, Travel Day)") }
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        onAddDay(newDayDraft.trim().ifBlank { "Day ${diet.days.size + 1}" })
-                        addDayDialogOpen = false
-                    }
-                ) { Text("Add") }
+                TextButton(onClick = {
+                    onAddDay(newDayName)
+                    newDayName = ""
+                    showAddDayDialog = false
+                }) { Text("Add") }
             },
             dismissButton = {
-                TextButton(onClick = { addDayDialogOpen = false }) { Text("Cancel") }
+                TextButton(onClick = { showAddDayDialog = false }) { Text("Cancel") }
             }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DayCard(
+fun DayPlanItem(
     dayPlan: DayPlan,
     isExpanded: Boolean,
-    onDayClicked: () -> Unit,
+    onToggleExpand: () -> Unit,
     onAddFood: (String, String) -> Unit,
     onEditFood: (String, Int, String) -> Unit,
     onRemoveFood: (String, Int) -> Unit
 ) {
-    var addFoodDialogOpen by remember { mutableStateOf(false) }
-    var foodDraft by remember { mutableStateOf("") }
-    var selectedMealType by remember { mutableStateOf("Colazione") }
-    val mealTypes = listOf("Colazione", "Pranzo", "Cena", "Snacks")
-    var mealTypeExpanded by remember { mutableStateOf(false) }
-
-    // State for editing food
-    var editFoodDialogOpen by remember { mutableStateOf(false) }
-    var foodToEdit by remember { mutableStateOf<Triple<String, Int, String>?>(null) } // MealType, Index, CurrentName
-    var editFoodDraft by remember { mutableStateOf("") }
-
-    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpand() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(dayPlan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Row {
-                    IconButton(onClick = { addFoodDialogOpen = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add food")
-                    }
-                    TextButton(onClick = onDayClicked) {
-                        Text(if (isExpanded) "Hide" else "Show")
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    modifier = Modifier.rotate(if (isExpanded) 180f else 0f)
+                )
             }
-            
+
             if (isExpanded) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
-                
-                MealSection("Colazione", dayPlan.breakfast, onEdit = { idx, name -> 
-                    foodToEdit = Triple("Colazione", idx, name)
-                    editFoodDraft = name
-                    editFoodDialogOpen = true
-                }, onRemove = { idx -> onRemoveFood("Colazione", idx) })
-                
-                MealSection("Pranzo", dayPlan.lunch, onEdit = { idx, name -> 
-                    foodToEdit = Triple("Pranzo", idx, name)
-                    editFoodDraft = name
-                    editFoodDialogOpen = true
-                }, onRemove = { idx -> onRemoveFood("Pranzo", idx) })
-                
-                MealSection("Cena", dayPlan.dinner, onEdit = { idx, name -> 
-                    foodToEdit = Triple("Cena", idx, name)
-                    editFoodDraft = name
-                    editFoodDialogOpen = true
-                }, onRemove = { idx -> onRemoveFood("Cena", idx) })
-                
-                MealSection("Snacks", dayPlan.snacks, onEdit = { idx, name -> 
-                    foodToEdit = Triple("Snacks", idx, name)
-                    editFoodDraft = name
-                    editFoodDialogOpen = true
-                }, onRemove = { idx -> onRemoveFood("Snacks", idx) })
-                
-                if (dayPlan.breakfast.isEmpty() && dayPlan.lunch.isEmpty() && dayPlan.dinner.isEmpty() && dayPlan.snacks.isEmpty()) {
-                    Text("No foods added.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
+                Spacer(modifier = Modifier.height(8.dp))
+                MealSection("Breakfast", dayPlan.breakfast, { onAddFood(it, "Breakfast") }, { idx, name -> onEditFood("Breakfast", idx, name) }, { idx -> onRemoveFood("Breakfast", idx) })
+                MealSection("Lunch", dayPlan.lunch, { onAddFood(it, "Lunch") }, { idx, name -> onEditFood("Lunch", idx, name) }, { idx -> onRemoveFood("Lunch", idx) })
+                MealSection("Dinner", dayPlan.dinner, { onAddFood(it, "Dinner") }, { idx, name -> onEditFood("Dinner", idx, name) }, { idx -> onRemoveFood("Dinner", idx) })
+                MealSection("Snacks", dayPlan.snacks, { onAddFood(it, "Snacks") }, { idx, name -> onEditFood("Snacks", idx, name) }, { idx -> onRemoveFood("Snacks", idx) })
             }
         }
-    }
-
-    if (addFoodDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { addFoodDialogOpen = false },
-            title = { Text("Add Food to ${dayPlan.name}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ExposedDropdownMenuBox(
-                        expanded = mealTypeExpanded,
-                        onExpandedChange = { mealTypeExpanded = !mealTypeExpanded }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedMealType,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Meal") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = mealTypeExpanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = mealTypeExpanded,
-                            onDismissRequest = { mealTypeExpanded = false }
-                        ) {
-                            mealTypes.forEach { type ->
-                                DropdownMenuItem(
-                                    text = { Text(type) },
-                                    onClick = {
-                                        selectedMealType = type
-                                        mealTypeExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    OutlinedTextField(
-                        value = foodDraft,
-                        onValueChange = { foodDraft = it },
-                        singleLine = true,
-                        label = { Text("Food name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onAddFood(foodDraft, selectedMealType)
-                    foodDraft = ""
-                    addFoodDialogOpen = false
-                }) { Text("Add") }
-            },
-            dismissButton = {
-                TextButton(onClick = { addFoodDialogOpen = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (editFoodDialogOpen) {
-        AlertDialog(
-            onDismissRequest = { editFoodDialogOpen = false },
-            title = { Text("Edit Food") },
-            text = {
-                OutlinedTextField(
-                    value = editFoodDraft,
-                    onValueChange = { editFoodDraft = it },
-                    singleLine = true,
-                    label = { Text("Food name") }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    foodToEdit?.let { (mealType, idx, _) ->
-                        onEditFood(mealType, idx, editFoodDraft)
-                    }
-                    editFoodDialogOpen = false
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editFoodDialogOpen = false }) { Text("Cancel") }
-            }
-        )
     }
 }
 
 @Composable
-fun MealSection(title: String, foods: List<String>, onEdit: (Int, String) -> Unit, onRemove: (Int) -> Unit) {
+fun MealSection(
+    title: String,
+    foods: List<String>,
+    onAddFood: (String) -> Unit,
+    onEditFood: (Int, String) -> Unit,
+    onRemoveFood: (Int) -> Unit
+) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var foodDraft by remember { mutableStateOf("") }
+    
+    var editingFoodIndex by remember { mutableStateOf<Int?>(null) }
+    var editFoodDraft by remember { mutableStateOf("") }
+
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Default.Add, contentDescription = "Add food", tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+
         if (foods.isEmpty()) {
-            Text(
-                text = "Empty",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.padding(start = 8.dp)
-            )
+            Text("No food added", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         } else {
             foods.forEachIndexed { index, food ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "• $food",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Row {
-                        IconButton(onClick = { onEdit(index, food) }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp))
-                        }
-                        IconButton(onClick = { onRemove(index) }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove", modifier = Modifier.size(16.dp))
-                        }
+                    Text("• $food", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    IconButton(onClick = {
+                        editFoodDraft = food
+                        editingFoodIndex = index
+                    }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = { onRemoveFood(index) }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(16.dp))
                     }
                 }
             }
         }
     }
-}
 
-@Preview(showBackground = true)
-@Composable
-fun DietScreenPreview() {
-    DietScreen()
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Add to $title") },
+            text = {
+                OutlinedTextField(value = foodDraft, onValueChange = { foodDraft = it }, label = { Text("Food name") })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onAddFood(foodDraft)
+                    foodDraft = ""
+                    showAddDialog = false
+                }) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+    
+    editingFoodIndex?.let { index ->
+        AlertDialog(
+            onDismissRequest = { editingFoodIndex = null },
+            title = { Text("Edit Food") },
+            text = {
+                OutlinedTextField(value = editFoodDraft, onValueChange = { editFoodDraft = it }, label = { Text("Food name") })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onEditFood(index, editFoodDraft)
+                    editingFoodIndex = null
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingFoodIndex = null }) { Text("Cancel") }
+            }
+        )
+    }
 }
