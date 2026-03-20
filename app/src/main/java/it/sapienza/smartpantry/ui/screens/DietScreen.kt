@@ -129,7 +129,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                                     }
                                 },
                                 onClick = {
-                                    dietViewModel.onDietSelected(diet.id)
+                                    dietViewModel.onDietSelected(diet.duid)
                                     menuExpanded = false
                                 },
                                 trailingIcon = {
@@ -171,7 +171,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     uiState.selectedDiet?.let { diet ->
                         // Heart button for Favorite Diet
-                        IconButton(onClick = { dietViewModel.toggleFavorite(diet.id) }) {
+                        IconButton(onClick = { dietViewModel.toggleFavorite(diet.duid) }) {
                             Icon(
                                 imageVector = if (diet.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 contentDescription = "Favorite",
@@ -193,7 +193,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                                         pendingWeeklyToggle = isChecked
                                         showWeeklyWarning = true
                                     } else {
-                                        dietViewModel.onDietWeeklyToggled(diet.id, isChecked)
+                                        dietViewModel.onDietWeeklyToggled(diet.duid, isChecked)
                                     }
                                 }
                             )
@@ -207,19 +207,19 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                 if (diet.isWeekly) {
                     WeeklyDietPlanContent(
                         diet = diet,
-                        onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
-                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName, mealType) },
-                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.id, dayIndex, mealType, foodIndex, newName) },
-                        onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.id, dayIndex, mealType, foodIndex) }
+                        onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.duid, dayIndex) },
+                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.duid, dayIndex, foodName, mealType) },
+                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.duid, dayIndex, mealType, foodIndex, newName) },
+                        onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.duid, dayIndex, mealType, foodIndex) }
                     )
                 } else {
                     NewDietContent(
                         diet = diet,
-                        onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.id, dayIndex) },
-                        onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.id, dayName) },
-                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.id, dayIndex, foodName, mealType) },
-                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.id, dayIndex, mealType, foodIndex, newName) },
-                        onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.id, dayIndex, mealType, foodIndex) }
+                        onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.duid, dayIndex) },
+                        onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.duid, dayName) },
+                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.duid, dayIndex, foodName, mealType) },
+                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.duid, dayIndex, mealType, foodIndex, newName) },
+                        onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.duid, dayIndex, mealType, foodIndex) }
                     )
                 }
             } ?: run {
@@ -256,7 +256,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                 TextButton(
                     onClick = {
                         uiState.selectedDiet?.let { diet ->
-                            dietViewModel.onDietWeeklyToggled(diet.id, pendingWeeklyToggle)
+                            dietViewModel.onDietWeeklyToggled(diet.duid, pendingWeeklyToggle)
                         }
                         showWeeklyWarning = false
                     }
@@ -268,7 +268,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
         )
     }
 
-    renameDialogOpen?.let { diet ->
+    if (renameDialogOpen != null) {
         AlertDialog(
             onDismissRequest = { renameDialogOpen = null },
             title = { Text("Rename diet") },
@@ -283,7 +283,9 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        dietViewModel.onDietNameChanged(diet.id, renameDraft)
+                        renameDialogOpen?.let { diet ->
+                            dietViewModel.onDietNameChanged(diet.duid, renameDraft)
+                        }
                         renameDialogOpen = null
                     }
                 ) { Text("Save") }
@@ -320,15 +322,17 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
         )
     }
 
-    dietToDelete?.let { diet ->
+    if (dietToDelete != null) {
         AlertDialog(
             onDismissRequest = { dietToDelete = null },
             title = { Text("Delete Diet") },
-            text = { Text("Are you sure you want to delete '${diet.name}'? This action cannot be undone.") },
+            text = { Text("Are you sure you want to delete '${dietToDelete?.name}'? This action cannot be undone.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        dietViewModel.deleteDiet(diet.id)
+                        dietToDelete?.let { diet ->
+                            dietViewModel.deleteDiet(diet.duid)
+                        }
                         dietToDelete = null
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
@@ -531,7 +535,7 @@ fun MealSection(
         )
     }
     
-    editingFoodIndex?.let { index ->
+    if (editingFoodIndex != null) {
         AlertDialog(
             onDismissRequest = { editingFoodIndex = null },
             title = { Text("Edit Food") },
@@ -540,7 +544,9 @@ fun MealSection(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onEditFood(index, editFoodDraft)
+                    editingFoodIndex?.let { index ->
+                        onEditFood(index, editFoodDraft)
+                    }
                     editingFoodIndex = null
                 }) { Text("Save") }
             },

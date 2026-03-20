@@ -15,7 +15,7 @@ import java.util.UUID
 // --- DATA MODELS ---
 
 data class Diet(
-    val id: String = UUID.randomUUID().toString(),
+    val duid: String = UUID.randomUUID().toString(),
     val name: String,
     val isWeekly: Boolean = false,
     val isFavorite: Boolean = false,
@@ -42,7 +42,7 @@ data class SaveDietRequest(val uid: String, val dietData: DietPayload)
 data class DietPayload(val diets: List<Diet>, val selectedDietId: String?)
 data class SaveDietResponse(val status: String)
 
-data class DeleteDietRequest(val uid: String, val dietId: String, val newSelectedId: String?)
+data class DeleteDietRequest(val uid: String, val duid: String, val newSelectedId: String?)
 data class DeleteDietResponse(val status: String)
 
 // --- VIEWMODEL STATE ---
@@ -51,7 +51,7 @@ data class DietUiState(
     val diets: List<Diet> = emptyList(),
     val selectedDietId: String? = null
 ) {
-    val selectedDiet: Diet? get() = diets.find { it.id == selectedDietId }
+    val selectedDiet: Diet? get() = diets.find { it.duid == selectedDietId }
 }
 
 // --- DEFAULTS ---
@@ -71,7 +71,7 @@ class DietViewModel : ViewModel() {
     private var currentUid: String? = null
 
     init {
-        _uiState.update { it.copy(selectedDietId = it.diets.firstOrNull()?.id) }
+        _uiState.update { it.copy(selectedDietId = it.diets.firstOrNull()?.duid) }
     }
 
     fun initialize(uid: String) {
@@ -92,10 +92,10 @@ class DietViewModel : ViewModel() {
                 val remoteDiets = remoteDietData?.diets ?: emptyList()
                 
                 // Priorità di selezione: 1. Dieta preferita, 2. selectedDietId dal backend, 3. Prima dieta della lista
-                val favoriteDietId = remoteDiets.find { it.isFavorite }?.id
+                val favoriteDietId = remoteDiets.find { it.isFavorite }?.duid
                 val selectedId = favoriteDietId 
-                    ?: remoteDietData?.selectedDietId?.takeIf { requestedId -> remoteDiets.any { it.id == requestedId } }
-                    ?: remoteDiets.firstOrNull()?.id
+                    ?: remoteDietData?.selectedDietId?.takeIf { requestedId -> remoteDiets.any { it.duid == requestedId } }
+                    ?: remoteDiets.firstOrNull()?.duid
                 
                 _uiState.update { it.copy(diets = remoteDiets, selectedDietId = selectedId) }
                 
@@ -137,7 +137,7 @@ class DietViewModel : ViewModel() {
     fun onDayClicked(dietId: String, dayIndex: Int) {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     val newIndices = if (diet.expandedDayIndices.contains(dayIndex)) {
                         diet.expandedDayIndices - dayIndex
                     } else {
@@ -154,23 +154,23 @@ class DietViewModel : ViewModel() {
         val trimmedName = newName.trim()
         if (trimmedName.isBlank()) return
         updatePersistentState { state ->
-            val updatedDiets = state.diets.map { if (it.id == dietId) it.copy(name = trimmedName) else it }
+            val updatedDiets = state.diets.map { if (it.duid == dietId) it.copy(name = trimmedName) else it }
             state.copy(diets = updatedDiets)
         }
     }
 
-    fun deleteDiet(dietId: String) {
+    fun deleteDiet(duid: String) {
         val uid = currentUid ?: return
         val currentState = _uiState.value
-        val updatedDiets = currentState.diets.filter { it.id != dietId }
-        val newSelectedId = if (currentState.selectedDietId == dietId) {
-            updatedDiets.firstOrNull()?.id
+        val updatedDiets = currentState.diets.filter { it.duid != duid }
+        val newSelectedId = if (currentState.selectedDietId == duid) {
+            updatedDiets.firstOrNull()?.duid
         } else {
             currentState.selectedDietId
         }
 
         // Chiamata API esplicita per la cancellazione
-        val request = DeleteDietRequest(uid, dietId, newSelectedId)
+        val request = DeleteDietRequest(uid, duid, newSelectedId)
         RetrofitClient.instance.deleteDiet(request).enqueue(object : Callback<DeleteDietResponse> {
             override fun onResponse(call: Call<DeleteDietResponse>, response: Response<DeleteDietResponse>) {
                 if (response.isSuccessful) {
@@ -189,7 +189,7 @@ class DietViewModel : ViewModel() {
         updatePersistentState { state ->
             val newDiet = Diet(name = trimmedName)
             val newDiets = state.diets + newDiet
-            state.copy(diets = newDiets, selectedDietId = newDiet.id)
+            state.copy(diets = newDiets, selectedDietId = newDiet.duid)
         }
     }
 
@@ -198,7 +198,7 @@ class DietViewModel : ViewModel() {
         if (trimmedDayName.isBlank()) return
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     diet.copy(days = diet.days + DayPlan(trimmedDayName))
                 } else diet
             }
@@ -211,7 +211,7 @@ class DietViewModel : ViewModel() {
         if (trimmedFood.isBlank()) return
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     val updatedDays = diet.days.mapIndexed { index, dayPlan ->
                         if (index == dayIndex) {
                             when (mealType) {
@@ -235,7 +235,7 @@ class DietViewModel : ViewModel() {
         if (trimmedFood.isBlank()) return
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     val updatedDays = diet.days.mapIndexed { dIdx, dayPlan ->
                         if (dIdx == dayIndex) {
                             when (mealType) {
@@ -257,7 +257,7 @@ class DietViewModel : ViewModel() {
     fun removeFoodFromDay(dietId: String, dayIndex: Int, mealType: String, foodIndex: Int) {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     val updatedDays = diet.days.mapIndexed { dIdx, dayPlan ->
                         if (dIdx == dayIndex) {
                             when (mealType) {
@@ -279,7 +279,7 @@ class DietViewModel : ViewModel() {
     fun onDietWeeklyToggled(dietId: String, isWeekly: Boolean) {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     diet.copy(
                         isWeekly = isWeekly,
                         days = if (isWeekly) DietDefaults.weekDays else emptyList(),
@@ -294,7 +294,7 @@ class DietViewModel : ViewModel() {
     fun toggleFavorite(dietId: String) {
         updatePersistentState { state ->
             val updatedDiets = state.diets.map { diet ->
-                if (diet.id == dietId) {
+                if (diet.duid == dietId) {
                     val newFavoriteStatus = !diet.isFavorite
                     // Se stiamo impostando questa come preferita, impostiamo selectedDietId a questa
                     diet.copy(isFavorite = newFavoriteStatus)
@@ -304,7 +304,7 @@ class DietViewModel : ViewModel() {
             }
             
             // Trova l'ID della dieta appena segnata come preferita (se presente)
-            val newFavoriteId = updatedDiets.find { it.isFavorite }?.id
+            val newFavoriteId = updatedDiets.find { it.isFavorite }?.duid
             
             if (newFavoriteId != null) {
                 state.copy(diets = updatedDiets, selectedDietId = newFavoriteId)
