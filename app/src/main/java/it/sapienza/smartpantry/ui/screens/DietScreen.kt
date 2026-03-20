@@ -37,6 +37,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DayPlan
 import it.sapienza.smartpantry.model.Diet
 import it.sapienza.smartpantry.model.DietViewModel
+import it.sapienza.smartpantry.model.FoodItem
 
 @Composable
 fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
@@ -208,8 +209,8 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                     WeeklyDietPlanContent(
                         diet = diet,
                         onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.duid, dayIndex) },
-                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.duid, dayIndex, foodName, mealType) },
-                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.duid, dayIndex, mealType, foodIndex, newName) },
+                        onAddFood = { dayIndex, foodName, quantity, mealType -> dietViewModel.addFoodToDay(diet.duid, dayIndex, foodName, quantity, mealType) },
+                        onEditFood = { dayIndex, mealType, foodIndex, newName, newQuantity -> dietViewModel.editFoodInDay(diet.duid, dayIndex, mealType, foodIndex, newName, newQuantity) },
                         onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.duid, dayIndex, mealType, foodIndex) }
                     )
                 } else {
@@ -217,8 +218,8 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                         diet = diet,
                         onDayClicked = { dayIndex -> dietViewModel.onDayClicked(diet.duid, dayIndex) },
                         onAddDay = { dayName -> dietViewModel.addDayToDiet(diet.duid, dayName) },
-                        onAddFood = { dayIndex, foodName, mealType -> dietViewModel.addFoodToDay(diet.duid, dayIndex, foodName, mealType) },
-                        onEditFood = { dayIndex, mealType, foodIndex, newName -> dietViewModel.editFoodInDay(diet.duid, dayIndex, mealType, foodIndex, newName) },
+                        onAddFood = { dayIndex, foodName, quantity, mealType -> dietViewModel.addFoodToDay(diet.duid, dayIndex, foodName, quantity, mealType) },
+                        onEditFood = { dayIndex, mealType, foodIndex, newName, newQuantity -> dietViewModel.editFoodInDay(diet.duid, dayIndex, mealType, foodIndex, newName, newQuantity) },
                         onRemoveFood = { dayIndex, mealType, foodIndex -> dietViewModel.removeFoodFromDay(diet.duid, dayIndex, mealType, foodIndex) }
                     )
                 }
@@ -349,8 +350,8 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
 private fun WeeklyDietPlanContent(
     diet: Diet,
     onDayClicked: (Int) -> Unit,
-    onAddFood: (Int, String, String) -> Unit,
-    onEditFood: (Int, String, Int, String) -> Unit,
+    onAddFood: (Int, String, String, String) -> Unit,
+    onEditFood: (Int, String, Int, String, String) -> Unit,
     onRemoveFood: (Int, String, Int) -> Unit
 ) {
     diet.days.forEachIndexed { index, dayPlan ->
@@ -358,8 +359,8 @@ private fun WeeklyDietPlanContent(
             dayPlan = dayPlan,
             isExpanded = diet.expandedDayIndices.contains(index),
             onToggleExpand = { onDayClicked(index) },
-            onAddFood = { food, meal -> onAddFood(index, food, meal) },
-            onEditFood = { meal, fIdx, newName -> onEditFood(index, meal, fIdx, newName) },
+            onAddFood = { food, qty, meal -> onAddFood(index, food, qty, meal) },
+            onEditFood = { meal, fIdx, newName, newQty -> onEditFood(index, meal, fIdx, newName, newQty) },
             onRemoveFood = { meal, fIdx -> onRemoveFood(index, meal, fIdx) }
         )
     }
@@ -370,8 +371,8 @@ private fun NewDietContent(
     diet: Diet,
     onDayClicked: (Int) -> Unit,
     onAddDay: (String) -> Unit,
-    onAddFood: (Int, String, String) -> Unit,
-    onEditFood: (Int, String, Int, String) -> Unit,
+    onAddFood: (Int, String, String, String) -> Unit,
+    onEditFood: (Int, String, Int, String, String) -> Unit,
     onRemoveFood: (Int, String, Int) -> Unit
 ) {
     var showAddDayDialog by remember { mutableStateOf(false) }
@@ -383,8 +384,8 @@ private fun NewDietContent(
                 dayPlan = dayPlan,
                 isExpanded = diet.expandedDayIndices.contains(index),
                 onToggleExpand = { onDayClicked(index) },
-                onAddFood = { food, meal -> onAddFood(index, food, meal) },
-                onEditFood = { meal, fIdx, newName -> onEditFood(index, meal, fIdx, newName) },
+                onAddFood = { food, qty, meal -> onAddFood(index, food, qty, meal) },
+                onEditFood = { meal, fIdx, newName, newQty -> onEditFood(index, meal, fIdx, newName, newQty) },
                 onRemoveFood = { meal, fIdx -> onRemoveFood(index, meal, fIdx) }
             )
         }
@@ -429,8 +430,8 @@ fun DayPlanItem(
     dayPlan: DayPlan,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
-    onAddFood: (String, String) -> Unit,
-    onEditFood: (String, Int, String) -> Unit,
+    onAddFood: (String, String, String) -> Unit,
+    onEditFood: (String, Int, String, String) -> Unit,
     onRemoveFood: (String, Int) -> Unit
 ) {
     Card(
@@ -457,10 +458,10 @@ fun DayPlanItem(
 
             if (isExpanded) {
                 Spacer(modifier = Modifier.height(8.dp))
-                MealSection("Breakfast", dayPlan.breakfast, { onAddFood(it, "Breakfast") }, { idx, name -> onEditFood("Breakfast", idx, name) }, { idx -> onRemoveFood("Breakfast", idx) })
-                MealSection("Lunch", dayPlan.lunch, { onAddFood(it, "Lunch") }, { idx, name -> onEditFood("Lunch", idx, name) }, { idx -> onRemoveFood("Lunch", idx) })
-                MealSection("Dinner", dayPlan.dinner, { onAddFood(it, "Dinner") }, { idx, name -> onEditFood("Dinner", idx, name) }, { idx -> onRemoveFood("Dinner", idx) })
-                MealSection("Snacks", dayPlan.snacks, { onAddFood(it, "Snacks") }, { idx, name -> onEditFood("Snacks", idx, name) }, { idx -> onRemoveFood("Snacks", idx) })
+                MealSection("Breakfast", dayPlan.breakfast, { f, q -> onAddFood(f, q, "Breakfast") }, { idx, n, q -> onEditFood("Breakfast", idx, n, q) }, { idx -> onRemoveFood("Breakfast", idx) })
+                MealSection("Lunch", dayPlan.lunch, { f, q -> onAddFood(f, q, "Lunch") }, { idx, n, q -> onEditFood("Lunch", idx, n, q) }, { idx -> onRemoveFood("Lunch", idx) })
+                MealSection("Dinner", dayPlan.dinner, { f, q -> onAddFood(f, q, "Dinner") }, { idx, n, q -> onEditFood("Dinner", idx, n, q) }, { idx -> onRemoveFood("Dinner", idx) })
+                MealSection("Snacks", dayPlan.snacks, { f, q -> onAddFood(f, q, "Snacks") }, { idx, n, q -> onEditFood("Snacks", idx, n, q) }, { idx -> onRemoveFood("Snacks", idx) })
             }
         }
     }
@@ -469,16 +470,18 @@ fun DayPlanItem(
 @Composable
 fun MealSection(
     title: String,
-    foods: List<String>,
-    onAddFood: (String) -> Unit,
-    onEditFood: (Int, String) -> Unit,
+    foods: List<FoodItem>,
+    onAddFood: (String, String) -> Unit,
+    onEditFood: (Int, String, String) -> Unit,
     onRemoveFood: (Int) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var foodDraft by remember { mutableStateOf("") }
+    var quantityDraft by remember { mutableStateOf("") }
     
     var editingFoodIndex by remember { mutableStateOf<Int?>(null) }
     var editFoodDraft by remember { mutableStateOf("") }
+    var editQuantityDraft by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(
@@ -500,9 +503,11 @@ fun MealSection(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("• $food", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    val displayText = if (food.quantity.isNotEmpty()) "${food.name} (${food.quantity})" else food.name
+                    Text("• $displayText", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                     IconButton(onClick = {
-                        editFoodDraft = food
+                        editFoodDraft = food.name
+                        editQuantityDraft = food.quantity
                         editingFoodIndex = index
                     }, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(16.dp))
@@ -520,12 +525,17 @@ fun MealSection(
             onDismissRequest = { showAddDialog = false },
             title = { Text("Add to $title") },
             text = {
-                OutlinedTextField(value = foodDraft, onValueChange = { foodDraft = it }, label = { Text("Food name") })
+                Column {
+                    OutlinedTextField(value = foodDraft, onValueChange = { foodDraft = it }, label = { Text("Food name") })
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = quantityDraft, onValueChange = { quantityDraft = it }, label = { Text("Quantity (e.g. 100g)") })
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onAddFood(foodDraft)
+                    onAddFood(foodDraft, quantityDraft)
                     foodDraft = ""
+                    quantityDraft = ""
                     showAddDialog = false
                 }) { Text("Add") }
             },
@@ -540,12 +550,16 @@ fun MealSection(
             onDismissRequest = { editingFoodIndex = null },
             title = { Text("Edit Food") },
             text = {
-                OutlinedTextField(value = editFoodDraft, onValueChange = { editFoodDraft = it }, label = { Text("Food name") })
+                Column {
+                    OutlinedTextField(value = editFoodDraft, onValueChange = { editFoodDraft = it }, label = { Text("Food name") })
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = editQuantityDraft, onValueChange = { editQuantityDraft = it }, label = { Text("Quantity") })
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     editingFoodIndex?.let { index ->
-                        onEditFood(index, editFoodDraft)
+                        onEditFood(index, editFoodDraft, editQuantityDraft)
                     }
                     editingFoodIndex = null
                 }) { Text("Save") }
