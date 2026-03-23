@@ -36,8 +36,8 @@ interface SmartPantryApi {
     @POST("pantry/add")
     fun addToPantry(@Body request: PantryAddRequest): Call<Unit>
 
-    @PATCH("pantry/quantity")
-    fun updateItemQuantity(@Body request: PantryQuantityRequest): Call<Unit>
+    @PATCH("pantry/grams")
+    fun updateItemGrams(@Body request: PantryGramsRequest): Call<Unit>
 
     @GET("pantry/{uid}")
     fun getPantry(@Path("uid") uid: String): Call<PantryResponse>
@@ -63,8 +63,16 @@ data class PantryAddNutrients(
     val protein: Double = 0.0
 )
 
-data class PantryQuantityRequest(
+data class PantryGramsRequest(
     val uid: String,
-    val openFoodFactsId: String,
-    val quantity: Int
-)
+    val openFoodFactsId: String? = null,
+    val productName: String? = null,
+    val grams: Double
+) {
+    init {
+        require(grams.isFinite() && grams >= 0.0) { "grams must be >= 0." }
+        require(
+            !openFoodFactsId.isNullOrBlank() || !productName.isNullOrBlank()
+        ) { "Either openFoodFactsId or productName is required." }
+    }
+}

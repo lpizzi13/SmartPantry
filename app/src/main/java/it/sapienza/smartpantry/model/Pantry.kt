@@ -11,6 +11,7 @@ data class PantryItem(
     @SerializedName("openFoodFactsId") val openFoodFactsId: String = "",
     @SerializedName("productName") val productName: String = "",
     @SerializedName("quantity") val quantity: Long = 0L,
+    @SerializedName(value = "grams", alternate = ["gramsRemaining"]) val grams: Double? = null,
     @SerializedName("kcal") val kcal: Double? = null,
     @SerializedName(value = "prot", alternate = ["protein"]) val prot: Double? = null,
     @SerializedName("fat") val fat: Double? = null,
@@ -34,6 +35,13 @@ fun PantryItem.resolvedProt(): Double? = firstNonNegative(prot, nutrients?.prot)
 fun PantryItem.resolvedFat(): Double? = firstNonNegative(fat, nutrients?.fat)
 fun PantryItem.resolvedCarbs(): Double? = firstNonNegative(carbs, nutrients?.carbs)
 fun PantryItem.resolvedPackageWeightGrams(): Double? = firstNonNegative(packageWeightGrams)
+fun PantryItem.resolvedGrams(): Double? = firstNonNegative(
+    grams,
+    if (quantity > 0L) {
+        val packageWeight = resolvedPackageWeightGrams()
+        if (packageWeight != null) quantity * packageWeight else quantity.toDouble()
+    } else null
+)
 
 private fun firstNonNegative(vararg values: Double?): Double? {
     for (value in values) {

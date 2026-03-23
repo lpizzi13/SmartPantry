@@ -8,7 +8,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,9 +20,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +32,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -60,10 +63,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.*
 import it.sapienza.smartpantry.service.PantryAddNutrients
 import it.sapienza.smartpantry.service.PantryAddRequest
-import it.sapienza.smartpantry.service.PantryQuantityRequest
+import it.sapienza.smartpantry.service.PantryGramsRequest
 import it.sapienza.smartpantry.service.RetrofitClient
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -122,6 +126,8 @@ class PantryViewModel : ViewModel() {
 
     private var currentUid = ""
     private var currentEditorTarget: EditorTarget? = null
+    private var searchJob: Job? = null
+    private var latestSearchToken: Long = 0L
 
     fun bindToUser(uid: String) {
         if (uid.isBlank()) {
@@ -171,26 +177,44 @@ class PantryViewModel : ViewModel() {
             emitEvent("Enter at least 2 characters to search.")
             return
         }
+
+        searchJob?.cancel()
+        val searchToken = ++latestSearchToken
         _uiState.update { it.copy(isSearching = true, hasSearched = true) }
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             try {
-                val results = searchProductsFromBackend(
+                val result = searchProductsFromBackend(
                     query = query,
                     similar = true,
                     limit = 15,
-                    lang = "en"
+                    lang = "it"
                 )
-                _uiState.update { it.copy(searchResults = results) }
+
+                if (searchToken != latestSearchToken) return@launch
+
+                if (result.isSuccess) {
+                    _uiState.update { it.copy(searchResults = result.getOrNull().orEmpty()) }
+                } else {
+                    _uiState.update { it.copy(searchResults = emptyList()) }
+                    emitEvent(
+                        "Search failed: ${result.exceptionOrNull()?.localizedMessage ?: "unknown error"}"
+                    )
+                }
             } catch (error: Throwable) {
-                emitEvent("Search failed: ${error.localizedMessage ?: "unknown error"}")
+                if (searchToken == latestSearchToken) {
+                    _uiState.update { it.copy(searchResults = emptyList()) }
+                    emitEvent("Search failed: ${error.localizedMessage ?: "unknown error"}")
+                }
             } finally {
-                _uiState.update { it.copy(isSearching = false) }
+                if (searchToken == latestSearchToken) {
+                    _uiState.update { it.copy(isSearching = false) }
+                }
             }
         }
     }
 
     fun openEditorFromSearchResult(product: OpenFoodFactsProduct) {
-        val openFoodFactsId = product.code?.trim().orEmpty()
+        val openFoodFactsId = product.resolvedOpenFoodFactsId().orEmpty()
         if (openFoodFactsId.isBlank()) {
             emitEvent("Invalid product code.")
             return
@@ -221,23 +245,65 @@ class PantryViewModel : ViewModel() {
     }
 
     fun deleteItem(item: PantryItem) {
+        submitItemGramsUpdate(
+            item = item,
+            targetGrams = 0.0,
+            successMessage = "Item removed from pantry."
+        )
+    }
+
+    fun updateItemGramsByDelta(item: PantryItem, rawDelta: String) {
+        val delta = parseSignedDecimalOrNull(rawDelta, "Grams delta") ?: return
+        val currentGrams = item.resolvedGrams() ?: 0.0
+        val targetGrams = (currentGrams + delta).coerceAtLeast(0.0)
+        if (abs(targetGrams - currentGrams) < 1e-9) {
+            emitEvent("No grams change detected.")
+            return
+        }
+
+        submitItemGramsUpdate(
+            item = item,
+            targetGrams = targetGrams,
+            successMessage = if (targetGrams <= 0.0) "Item removed from pantry." else "Item grams updated."
+        )
+    }
+
+    private fun submitItemGramsUpdate(
+        item: PantryItem,
+        targetGrams: Double,
+        successMessage: String
+    ) {
         if (currentUid.isBlank()) {
             emitEvent("User not authenticated. Please log in again.")
             return
         }
+        val openFoodFactsId = item.openFoodFactsId.takeIf { it.isNotBlank() }
+        val productName = item.productName.takeIf { it.isNotBlank() }
+        if (openFoodFactsId.isNullOrBlank() && productName.isNullOrBlank()) {
+            emitEvent("Missing item identifier.")
+            return
+        }
+
         _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
-                val result = updateItemQuantity(currentUid, item.openFoodFactsId, 0L)
+                val result = updateItemGrams(
+                    uid = currentUid,
+                    openFoodFactsId = openFoodFactsId,
+                    productName = productName,
+                    grams = targetGrams
+                )
                 if (result.isSuccess) {
-                    _uiState.update { state ->
-                        state.copy(
-                            pantryItems = state.pantryItems.filterNot {
-                                it.openFoodFactsId == item.openFoodFactsId
-                            }
+                    val refresh = refreshPantryFromBackend(currentUid)
+                    if (refresh.isFailure) {
+                        emitEvent(
+                            "Unable to load pantry: ${
+                                refresh.exceptionOrNull()?.localizedMessage ?: "unknown error"
+                            }"
                         )
+                    } else {
+                        emitEvent(successMessage)
                     }
-                    emitEvent("Item removed from pantry.")
                 } else {
                     emitEvent(
                         "Operation failed: ${result.exceptionOrNull()?.localizedMessage ?: "unknown error"}"
@@ -402,6 +468,15 @@ class PantryViewModel : ViewModel() {
         return parsed
     }
 
+    private fun parseSignedDecimalOrNull(value: String, fieldName: String): Double? {
+        val parsed = value.trim().replace(',', '.').toDoubleOrNull()
+        if (parsed == null || !parsed.isFinite()) {
+            emitEvent("$fieldName must be a valid number.")
+            return null
+        }
+        return parsed
+    }
+
     private fun emitEvent(message: String) = _events.tryEmit(message)
 
     private suspend fun refreshPantryFromBackend(uid: String): Result<Unit> {
@@ -420,8 +495,8 @@ class PantryViewModel : ViewModel() {
         query: String,
         similar: Boolean = true,
         limit: Int = 15,
-        lang: String = "en"
-    ): List<OpenFoodFactsProduct> = withContext(Dispatchers.IO) {
+        lang: String = "it"
+    ): Result<List<OpenFoodFactsProduct>> = withContext(Dispatchers.IO) {
         try {
             val response = api.searchProducts(
                 query = query,
@@ -429,23 +504,27 @@ class PantryViewModel : ViewModel() {
                 limit = limit,
                 lang = lang
             ).execute()
-            if (response.isSuccessful) {
-                val body = response.body()
-                val ranked = if (similar && !body?.recommended.isNullOrEmpty()) {
-                    body?.recommended.orEmpty()
-                } else {
-                    body?.products.orEmpty()
-                }
-
-                ranked
-                    .filter { !it.code.isNullOrBlank() }
-                    .distinctBy { it.code }
-                    .take(limit)
-            } else {
-                emptyList()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(
+                    IllegalStateException(parseBackendError(response, "Search failed."))
+                )
             }
-        } catch (_: Exception) {
-            emptyList()
+
+            val body = response.body()
+            val ranked = if (!body?.products.isNullOrEmpty()) {
+                body?.products.orEmpty()
+            } else {
+                body?.recommended.orEmpty()
+            }
+
+            val sanitized = ranked
+                .filter { !it.resolvedOpenFoodFactsId().isNullOrBlank() }
+                .distinctBy { it.resolvedOpenFoodFactsId() }
+                .take(limit)
+
+            Result.success(sanitized)
+        } catch (error: Exception) {
+            Result.failure(IllegalStateException(error.localizedMessage ?: "Search failed.", error))
         }
     }
 
@@ -534,33 +613,41 @@ class PantryViewModel : ViewModel() {
         }
     }
 
-    private suspend fun updateItemQuantity(
+    private suspend fun updateItemGrams(
         uid: String,
-        openFoodFactsId: String,
-        quantity: Long
+        openFoodFactsId: String?,
+        productName: String?,
+        grams: Double
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val quantityValue = quantity.toIntOrNullChecked(allowZero = true)
-            ?: return@withContext Result.failure(
-                IllegalArgumentException("Quantity must be 0 or greater.")
+        if (!grams.isFinite() || grams < 0.0) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Grams must be 0 or greater.")
             )
+        }
+        if (openFoodFactsId.isNullOrBlank() && productName.isNullOrBlank()) {
+            return@withContext Result.failure(
+                IllegalArgumentException("Missing item identifier.")
+            )
+        }
 
         try {
-            val response = api.updateItemQuantity(
-                PantryQuantityRequest(
+            val response = api.updateItemGrams(
+                PantryGramsRequest(
                     uid = uid,
                     openFoodFactsId = openFoodFactsId,
-                    quantity = quantityValue
+                    productName = productName,
+                    grams = sanitizeMacro(grams)
                 )
             ).execute()
             if (response.isSuccessful) {
                 Result.success(Unit)
             } else {
                 Result.failure(
-                    IllegalStateException(parseBackendError(response, "Unable to update quantity."))
+                    IllegalStateException(parseBackendError(response, "Unable to update grams."))
                 )
             }
         } catch (_: Exception) {
-            Result.failure(IllegalStateException("Unable to update quantity."))
+            Result.failure(IllegalStateException("Unable to update grams."))
         }
     }
 
@@ -569,7 +656,7 @@ class PantryViewModel : ViewModel() {
         fallbackBarcode: String
     ): BarcodeResolution {
         val product = body?.product
-        val resolvedId = product?.code?.trim().orEmpty().ifBlank { fallbackBarcode }
+        val resolvedId = product?.resolvedOpenFoodFactsId().orEmpty().ifBlank { fallbackBarcode }
         val resolvedName = product?.productName?.trim().orEmpty().ifBlank { "Unnamed product" }
         val resolvedKcal = product?.resolvedKcal()
         val resolvedProt = product?.resolvedProt()
@@ -663,6 +750,8 @@ fun PantryScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by pantryViewModel.uiState.collectAsState()
     var pendingDeletionItem by remember { mutableStateOf<PantryItem?>(null) }
+    var pendingGramsEditItem by remember { mutableStateOf<PantryItem?>(null) }
+    var gramsDeltaInput by rememberSaveable { mutableStateOf("0") }
     var selectedCategory by rememberSaveable { mutableStateOf<PantryCategory?>(null) }
     val categorizedItems = remember(uiState.pantryItems) {
         groupPantryItemsByCategory(uiState.pantryItems)
@@ -743,33 +832,93 @@ fun PantryScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (uiState.pantryItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Your pantry is empty.", color = Color.Gray)
-                }
-            } else if (filteredItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No items in this category.", color = Color.Gray)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(
-                        filteredItems,
-                        key = { "${it.openFoodFactsId}_${it.productName}" }
-                    ) { item ->
-                        PantryItemCard(
-                            item = item,
-                            isSaving = uiState.isSaving,
-                            onDeleteRequested = { pendingDeletionItem = item }
-                        )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true)
+            ) {
+                if (uiState.pantryItems.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Your pantry is empty.", color = Color.Gray)
+                    }
+                } else if (filteredItems.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No items in this category.", color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(
+                            filteredItems,
+                            key = { "${it.openFoodFactsId}_${it.productName}" }
+                        ) { item ->
+                            PantryItemCard(
+                                item = item,
+                                isSaving = uiState.isSaving,
+                                onEditGramsRequested = {
+                                    pendingGramsEditItem = item
+                                    gramsDeltaInput = "0"
+                                },
+                                onDeleteRequested = { pendingDeletionItem = item }
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    pendingGramsEditItem?.let { item ->
+        val currentGrams = item.resolvedGrams() ?: 0.0
+        val parsedDelta = parseSignedDecimalInput(gramsDeltaInput)
+        val nextGrams = (currentGrams + (parsedDelta ?: 0.0)).coerceAtLeast(0.0)
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!uiState.isSaving) pendingGramsEditItem = null
+            },
+            containerColor = PantryCardColor,
+            titleContentColor = Color.White,
+            textContentColor = Color.Gray,
+            title = { Text("Update grams") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Current grams: ${formatGrams(currentGrams)}")
+                    OutlinedTextField(
+                        value = gramsDeltaInput,
+                        onValueChange = { gramsDeltaInput = it },
+                        label = { Text("Delta grams (+/-)") },
+                        singleLine = true,
+                        enabled = !uiState.isSaving,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Text("New grams: ${formatGrams(nextGrams)}")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pantryViewModel.updateItemGramsByDelta(item, gramsDeltaInput)
+                        pendingGramsEditItem = null
+                    },
+                    enabled = !uiState.isSaving && parsedDelta != null
+                ) {
+                    Text("Save", color = PantryAccentColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingGramsEditItem = null },
+                    enabled = !uiState.isSaving
+                ) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
     }
 
     pendingDeletionItem?.let { item ->
@@ -872,6 +1021,7 @@ private fun PantryCategoryChip(
 private fun PantryItemCard(
     item: PantryItem,
     isSaving: Boolean,
+    onEditGramsRequested: () -> Unit,
     onDeleteRequested: () -> Unit
 ) {
     Card(
@@ -886,16 +1036,18 @@ private fun PantryItemCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier
+                    .width(58.dp)
+                    .height(44.dp),
                 shape = RoundedCornerShape(12.dp),
                 color = PantryBackgroundColor
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = item.quantity.toString(),
+                        text = formatGramsBadge(item.resolvedGrams()),
                         color = PantryAccentColor,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
+                        fontSize = 13.sp
                     )
                 }
             }
@@ -910,7 +1062,7 @@ private fun PantryItemCard(
                     color = Color.White
                 )
                 Text(
-                    text = "kcal ${formatDecimalInput(item.resolvedKcal())} • ${formatDecimalInput(item.resolvedPackageWeightGrams())}g",
+                    text = "kcal ${formatDecimalInput(item.resolvedKcal())}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
@@ -921,19 +1073,39 @@ private fun PantryItemCard(
                 )
             }
             
-            IconButton(
-                onClick = onDeleteRequested,
-                enabled = !isSaving,
-                modifier = Modifier
-                    .background(PantryBackgroundColor, RoundedCornerShape(10.dp))
-                    .size(36.dp)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Remove item",
-                    tint = Color.Red.copy(alpha = 0.8f),
-                    modifier = Modifier.size(20.dp)
-                )
+                IconButton(
+                    onClick = onEditGramsRequested,
+                    enabled = !isSaving,
+                    modifier = Modifier
+                        .background(PantryBackgroundColor, RoundedCornerShape(10.dp))
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit grams",
+                        tint = PantryAccentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onDeleteRequested,
+                    enabled = !isSaving,
+                    modifier = Modifier
+                        .background(PantryBackgroundColor, RoundedCornerShape(10.dp))
+                        .size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Remove item",
+                        tint = Color.Red.copy(alpha = 0.8f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -948,6 +1120,16 @@ private fun formatDecimalInput(value: Double?): String {
     val safe = (value ?: 0.0).let { if (it.isFinite() && it >= 0.0) it else 0.0 }
     return if (safe.toLong().toDouble() == safe) safe.toLong().toString()
     else String.format(Locale.US, "%.1f", safe).trimEnd('0').trimEnd('.')
+}
+
+private fun formatGrams(value: Double?): String = "${formatDecimalInput(value)}g"
+
+private fun formatGramsBadge(value: Double?): String = formatGrams(value)
+
+private fun parseSignedDecimalInput(value: String): Double? {
+    val normalized = value.trim().replace(',', '.')
+    if (normalized.isBlank()) return null
+    return normalized.toDoubleOrNull()?.takeIf { it.isFinite() }
 }
 
 private fun groupPantryItemsByCategory(items: List<PantryItem>): Map<PantryCategory, List<PantryItem>> {
@@ -978,3 +1160,4 @@ private fun classifyPantryItem(item: PantryItem): PantryCategory {
         else -> PantryCategory.OTHER
     }
 }
+
