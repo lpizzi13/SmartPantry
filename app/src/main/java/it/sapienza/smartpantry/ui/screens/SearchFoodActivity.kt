@@ -431,16 +431,6 @@ private fun FoodEditorDialog(
                     colors = searchFieldColors()
                 )
                 OutlinedTextField(
-                    value = state.editorQuantityInput,
-                    onValueChange = onQuantityChange,
-                    label = { Text("Quantity") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
-                OutlinedTextField(
                     value = state.editorKcalInput,
                     onValueChange = onKcalChange,
                     label = { Text("Kcal") },
@@ -477,6 +467,16 @@ private fun FoodEditorDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = searchFieldColors()
+                )
+                OutlinedTextField(
+                    value = state.editorQuantityInput,
+                    onValueChange = onQuantityChange,
+                    label = { Text("Quantity") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(14.dp),
                     colors = searchFieldColors()
                 )

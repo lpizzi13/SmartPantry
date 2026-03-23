@@ -14,11 +14,15 @@ fun OpenFoodFactsProduct.toSearchFood(
 ): SearchFood {
     val id = resolvedOpenFoodFactsId().orEmpty()
     val isCertifiedByRule = certified == true
+    val alreadyInPantry = pantryById[id]?.let { pantryItem ->
+        pantryItem.quantity.takeIf { it > 0L }
+            ?: pantryItem.resolvedGrams()?.toLong()?.takeIf { it > 0L }
+    }
 
     return SearchFood(
         productName = productName?.trim().orEmpty().ifBlank { "Unnamed product" },
         brandName = brands?.takeIf { it.isNotBlank() } ?: "Unknown brand",
-        alreadyInPantryQuantity = pantryById[id]?.quantity,
+        alreadyInPantryQuantity = alreadyInPantry,
         isCertified = isCertifiedByRule
     )
 }
