@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -30,6 +31,7 @@ import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
+import it.sapienza.smartpantry.model.DietViewModel
 import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
@@ -93,7 +95,7 @@ sealed class Screen(val route: String, val titleRes: Int, val iconRes: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(initialUser: User, onLogout: () -> Unit) {
+fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewModel = viewModel()) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -107,7 +109,10 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
 
     // Prefetch profile image to avoid delay in ProfileScreen
     val context = LocalContext.current
-    LaunchedEffect(user.profileImageUrl) {
+    LaunchedEffect(user.uid, user.profileImageUrl) {
+        if (user.uid.isNotBlank()) {
+            dietViewModel.initialize(user.uid)
+        }
         if (user.profileImageUrl.isNotEmpty()) {
             val request = ImageRequest.Builder(context)
                 .data(user.profileImageUrl)
@@ -238,7 +243,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit) {
                     }
                 ) }
                 composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
-                composable(Screen.Diet.route) { DietScreen(uid = user.uid) }
+                composable(Screen.Diet.route) { DietScreen(uid = user.uid, dietViewModel = dietViewModel) }
                 composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
                 composable(Screen.Profile.route) {
                     ProfileScreen(
