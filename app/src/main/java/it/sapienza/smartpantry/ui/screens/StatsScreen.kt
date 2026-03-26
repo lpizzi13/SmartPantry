@@ -162,43 +162,95 @@ fun MacrosBarChart(stats: List<DailyMacroStats>) {
     val avgFat = stats.map { it.fats }.average().toFloat()
     
     val macros = listOf(
-        Triple("Proteins", avgPro, Color(0xFFFF5252)),
-        Triple("Carbs", avgCarb, Color(0xFFFFD740)),
-        Triple("Fats", avgFat, Color(0xFF448AFF))
+        Triple("Prot", avgPro, Color(0xFFFF5252)),
+        Triple("Carb", avgCarb, Color(0xFFFFD740)),
+        Triple("Fat", avgFat, Color(0xFF448AFF))
     )
     
-    val maxVal = macros.maxOf { it.second }.coerceAtLeast(1f)
+    val maxVal = ((macros.maxOf { it.second } / 50).toInt() + 1) * 50f
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.SpaceEvenly
-    ) {
-        macros.forEach { (label, value, color) ->
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(label, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("${value.toInt()}g", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(20.dp)
-                ) {
-                    val barWidth = (value / maxVal) * size.width
-                    drawRoundRect(
-                        color = color.copy(alpha = 0.2f),
-                        size = Size(size.width, size.height),
-                        cornerRadius = CornerRadius(10f, 10f)
+    Row(modifier = Modifier.fillMaxSize()) {
+        // Y-Axis Labels (Macro Names)
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(bottom = 24.dp, top = 8.dp, end = 8.dp),
+            verticalArrangement = Arrangement.SpaceAround,
+            horizontalAlignment = Alignment.End
+        ) {
+            macros.forEach { (label, _, _) ->
+                Text(
+                    text = label,
+                    color = Color.Gray.copy(alpha = 0.7f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Canvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp, top = 8.dp)
+            ) {
+                val width = size.width
+                val height = size.height
+                val barHeight = 24.dp.toPx()
+                val spacing = height / macros.size
+
+                // Vertical Grid Lines (X-Axis)
+                val steps = 4
+                for (i in 0..steps) {
+                    val x = (i.toFloat() / steps) * width
+                    drawLine(
+                        color = Color.Gray.copy(alpha = 0.1f),
+                        start = Offset(x, 0f),
+                        end = Offset(x, height),
+                        strokeWidth = 1.dp.toPx()
                     )
+                }
+
+                // Horizontal Bars
+                macros.forEachIndexed { index, (_, value, color) ->
+                    val y = (index * spacing) + (spacing / 2) - (barHeight / 2)
+                    val barWidth = (value / maxVal) * width
+                    
+                    // Background track
+                    drawRoundRect(
+                        color = color.copy(alpha = 0.1f),
+                        topLeft = Offset(0f, y),
+                        size = Size(width, barHeight),
+                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                    )
+                    
+                    // Actual bar
                     drawRoundRect(
                         color = color,
-                        size = Size(barWidth, size.height),
-                        cornerRadius = CornerRadius(10f, 10f)
+                        topLeft = Offset(0f, y),
+                        size = Size(barWidth, barHeight),
+                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                    )
+                    
+                    // Value text next to bar if there's space, else inside
+                    // (Simplified: just draw the bars, values are in X-axis or summary)
+                }
+            }
+            
+            // X-Axis Labels (Grams)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val steps = 4
+                for (i in 0..steps) {
+                    val label = (maxVal * i / steps).toInt()
+                    Text(
+                        text = "${label}g",
+                        color = Color.Gray.copy(alpha = 0.7f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -468,8 +520,8 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>) {
             // Macro averages
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 MacroStatSmall("PRO", "${avgPro}g", "🥩")
-                MacroStatSmall("CARB", "${avgCarb}g", "🍞")
-                MacroStatSmall("FAT", "${avgFat}g", "🥑")
+                MacroStatSmall("Carb", "${avgCarb}g", "🍞")
+                MacroStatSmall("Fat", "${avgFat}g", "🥑")
             }
         }
     }
