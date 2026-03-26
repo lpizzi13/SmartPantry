@@ -32,10 +32,7 @@ import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.model.DietViewModel
-import it.sapienza.smartpantry.ui.screens.DietScreen
-import it.sapienza.smartpantry.ui.screens.HomeScreen
-import it.sapienza.smartpantry.ui.screens.PantryScreen
-import it.sapienza.smartpantry.ui.screens.ProfileScreen
+import it.sapienza.smartpantry.ui.screens.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -107,7 +104,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
     val neonGreen = Color(0xFF00E676)
     val unselectedGrey = Color.Gray
 
-    // Prefetch profile image to avoid delay in ProfileScreen
+    // Prefetch profile image and initialize diet data
     val context = LocalContext.current
     LaunchedEffect(user.uid, user.profileImageUrl) {
         if (user.uid.isNotBlank()) {
@@ -244,7 +241,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                 ) }
                 composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
                 composable(Screen.Diet.route) { DietScreen(uid = user.uid, dietViewModel = dietViewModel) }
-                composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
+                composable(Screen.Stats.route) { StatsScreen(uid = user.uid) }
                 composable(Screen.Profile.route) {
                     ProfileScreen(
                         user = user,
