@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,7 +72,7 @@ fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) 
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         "CALORIES TIMELINE",
-                        color = Color.Gray,
+                        color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
@@ -291,7 +292,11 @@ fun ChartTooltip(stat: DailyMacroStats, modifier: Modifier = Modifier) {
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold
             )
-            Divider(modifier = Modifier.padding(vertical = 4.dp), color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                thickness = DividerDefaults.Thickness,
+                color = Color.White.copy(alpha = 0.1f)
+            )
             TooltipMacroRow("Pro", "${stat.proteins}g")
             TooltipMacroRow("Carb", "${stat.carbs}g")
             TooltipMacroRow("Fat", "${stat.fats}g")
@@ -320,7 +325,7 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text("WEEKLY AVERAGE", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("WEEKLY AVERAGE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
