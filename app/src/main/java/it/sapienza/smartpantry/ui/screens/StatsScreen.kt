@@ -318,7 +318,10 @@ fun TooltipMacroRow(label: String, value: String) {
 @Composable
 fun StatsSummaryCard(stats: List<DailyMacroStats>) {
     val avgKcal = if (stats.isNotEmpty()) stats.map { it.kcal }.average().toInt() else 0
-    
+    val avgPro = if (stats.isNotEmpty()) stats.map { it.proteins }.average().toInt() else 0
+    val avgCarb = if (stats.isNotEmpty()) stats.map { it.carbs }.average().toInt() else 0
+    val avgFat = if (stats.isNotEmpty()) stats.map { it.fats }.average().toInt() else 0
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -344,20 +347,32 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>) {
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Macro averages (Mock representation)
+            // Macro averages
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                MacroStatSmall("PRO", "125g")
-                MacroStatSmall("CARB", "240g")
-                MacroStatSmall("FAT", "70g")
+                MacroStatSmall("PRO", "${avgPro}g", "🥩")
+                MacroStatSmall("CARB", "${avgCarb}g", "🍞")
+                MacroStatSmall("FAT", "${avgFat}g", "🥑")
             }
         }
     }
 }
 
 @Composable
-fun MacroStatSmall(label: String, value: String) {
-    Column {
-        Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-        Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+fun MacroStatSmall(label: String, value: String, emoji: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xFF2A3431),
+            modifier = Modifier.size(32.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(emoji, fontSize = 16.sp)
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+            Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
     }
 }
