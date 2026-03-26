@@ -1,16 +1,21 @@
 package it.sapienza.smartpantry.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -21,10 +26,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DailyMacroStats
 import it.sapienza.smartpantry.model.StatsViewModel
 
+enum class ChartType {
+    CALORIES, MACRONUTRIENTS
+}
+
 @Composable
 fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) {
     val uiState by statsViewModel.uiState.collectAsState()
     var selectedKcalIndex by remember { mutableStateOf<Int?>(null) }
+    var selectedChart by remember { mutableStateOf(ChartType.CALORIES) }
+    var expanded by remember { mutableStateOf(false) }
 
     // Load stats when the screen is opened
     LaunchedEffect(uid) {
@@ -61,7 +72,7 @@ fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) 
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Calories Chart
+            // Chart Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -70,17 +81,124 @@ fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) 
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "CALORIES TIMELINE",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { expanded = true }
+                        ) {
+                            Text(
+                                if (selectedChart == ChartType.CALORIES) "CALORIES TIMELINE" else "MACRONUTRIENTS",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = "Select Chart",
+                                tint = Color.White
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier.background(Color(0xFF2A3431))
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Calories Timeline", color = Color.White) },
+                                onClick = {
+                                    selectedChart = ChartType.CALORIES
+                                    expanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Macronutrients", color = Color.White) },
+                                onClick = {
+                                    selectedChart = ChartType.MACRONUTRIENTS
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(16.dp))
-                    KcalLineChart(
-                        stats = uiState.weeklyStats,
-                        selectedIndex = selectedKcalIndex,
-                        onSelectedIndexChange = { selectedKcalIndex = it }
+                    
+                    AnimatedContent(
+                        targetState = selectedChart,
+                        transitionSpec = {
+                            fadeIn() togetherWith fadeOut()
+                        },
+                        label = "ChartTransition"
+                    ) { chart ->
+                        when (chart) {
+                            ChartType.CALORIES -> {
+                                KcalLineChart(
+                                    stats = uiState.weeklyStats,
+                                    selectedIndex = selectedKcalIndex,
+                                    onSelectedIndexChange = { selectedKcalIndex = it }
+                                )
+                            }
+                            ChartType.MACRONUTRIENTS -> {
+                                MacrosBarChart(uiState.weeklyStats)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MacrosBarChart(stats: List<DailyMacroStats>) {
+    if (stats.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No data available", color = Color.Gray)
+        }
+        return
+    }
+
+    val avgPro = stats.map { it.proteins }.average().toFloat()
+    val avgCarb = stats.map { it.carbs }.average().toFloat()
+    val avgFat = stats.map { it.fats }.average().toFloat()
+    
+    val macros = listOf(
+        Triple("Proteins", avgPro, Color(0xFFFF5252)),
+        Triple("Carbs", avgCarb, Color(0xFFFFD740)),
+        Triple("Fats", avgFat, Color(0xFF448AFF))
+    )
+    
+    val maxVal = macros.maxOf { it.second }.coerceAtLeast(1f)
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceEvenly
+    ) {
+        macros.forEach { (label, value, color) ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(label, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("${value.toInt()}g", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp)
+                ) {
+                    val barWidth = (value / maxVal) * size.width
+                    drawRoundRect(
+                        color = color.copy(alpha = 0.2f),
+                        size = Size(size.width, size.height),
+                        cornerRadius = CornerRadius(10f, 10f)
+                    )
+                    drawRoundRect(
+                        color = color,
+                        size = Size(barWidth, size.height),
+                        cornerRadius = CornerRadius(10f, 10f)
                     )
                 }
             }
