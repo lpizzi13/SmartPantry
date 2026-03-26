@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import it.sapienza.smartpantry.model.DailyMacroStats
 import it.sapienza.smartpantry.model.StatsViewModel
 import it.sapienza.smartpantry.model.User
 
@@ -31,18 +30,44 @@ enum class ChartType {
     CALORIES, MACRONUTRIENTS
 }
 
+enum class TimeRange {
+    WEEKLY, MONTHLY
+}
+
+// Common UI model to unify Daily and Weekly stats for charts
+data class StatPoint(
+    val label: String,
+    val kcal: Int,
+    val proteins: Int,
+    val carbs: Int,
+    val fats: Int
+)
+
 @Composable
 fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
     val uiState by statsViewModel.uiState.collectAsState()
+    var selectedPeriod by remember { mutableStateOf(TimeRange.WEEKLY) }
     var selectedKcalIndex by remember { mutableStateOf<Int?>(null) }
     var selectedChart by remember { mutableStateOf(ChartType.CALORIES) }
-    var expanded by remember { mutableStateOf(false) }
+    var expandedChartMenu by remember { mutableStateOf(false) }
 
     // Load stats when the screen is opened
     LaunchedEffect(user.uid) {
         if (user.uid.isNotBlank()) {
             statsViewModel.loadStats(user.uid)
         }
+    }
+
+    // Map data based on selection
+    val currentStats = if (selectedPeriod == TimeRange.WEEKLY) {
+        uiState.weeklyStats.map { StatPoint(it.date, it.kcal, it.proteins, it.carbs, it.fats) }
+    } else {
+        uiState.monthlyStats.map { StatPoint(it.week, it.kcal, it.proteins, it.carbs, it.fats) }
+    }
+
+    // Reset selection when data changes
+    LaunchedEffect(selectedPeriod) {
+        selectedKcalIndex = null
     }
 
     Column(
@@ -56,12 +81,43 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "WEEKLY STATISTICS",
+            text = "STATISTICS",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF00E676),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
         )
+
+        // Time Range Selector
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+                .background(Color(0xFF1A2421), RoundedCornerShape(12.dp))
+                .padding(4.dp)
+        ) {
+            TimeRange.entries.forEach { range ->
+                val isSelected = selectedPeriod == range
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(
+                            if (isSelected) Color(0xFF00E676) else Color.Transparent,
+                            RoundedCornerShape(8.dp)
+                        )
+                        .clickable { selectedPeriod = range }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = range.name,
+                        color = if (isSelected) Color.Black else Color.Gray,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
 
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -69,7 +125,7 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
             }
         } else {
             // Summary Card
-            StatsSummaryCard(uiState.weeklyStats, user)
+            StatsSummaryCard(currentStats, user, selectedPeriod)
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -85,7 +141,7 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
                     Box {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { expanded = true }
+                            modifier = Modifier.clickable { expandedChartMenu = true }
                         ) {
                             Text(
                                 if (selectedChart == ChartType.CALORIES) "CALORIES TIMELINE" else "MACRONUTRIENTS",
@@ -100,22 +156,22 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
                             )
                         }
                         DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false },
+                            expanded = expandedChartMenu,
+                            onDismissRequest = { expandedChartMenu = false },
                             modifier = Modifier.background(Color(0xFF2A3431))
                         ) {
                             DropdownMenuItem(
                                 text = { Text("Calories Timeline", color = Color.White) },
                                 onClick = {
                                     selectedChart = ChartType.CALORIES
-                                    expanded = false
+                                    expandedChartMenu = false
                                 }
                             )
                             DropdownMenuItem(
                                 text = { Text("Macronutrients", color = Color.White) },
                                 onClick = {
                                     selectedChart = ChartType.MACRONUTRIENTS
-                                    expanded = false
+                                    expandedChartMenu = false
                                 }
                             )
                         }
@@ -132,15 +188,18 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
                     ) { chart ->
                         when (chart) {
                             ChartType.CALORIES -> {
+                                // Target remains the daily one, as requested.
+                                val targetKcal = user.goals.dailyKcal
+
                                 KcalLineChart(
-                                    stats = uiState.weeklyStats,
-                                    targetKcal = user.goals.dailyKcal,
+                                    stats = currentStats,
+                                    targetKcal = targetKcal,
                                     selectedIndex = selectedKcalIndex,
                                     onSelectedIndexChange = { selectedKcalIndex = it }
                                 )
                             }
                             ChartType.MACRONUTRIENTS -> {
-                                MacrosBarChart(uiState.weeklyStats, user)
+                                MacrosBarChart(currentStats, user)
                             }
                         }
                     }
@@ -151,7 +210,7 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
 }
 
 @Composable
-fun MacrosBarChart(stats: List<DailyMacroStats>, user: User) {
+fun MacrosBarChart(stats: List<StatPoint>, user: User) {
     if (stats.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No data available", color = Color.Gray)
@@ -261,9 +320,9 @@ fun MacrosBarChart(stats: List<DailyMacroStats>, user: User) {
             ) {
                 val steps = 4
                 for (i in 0..steps) {
-                    val label = (maxVal * i / steps).toInt()
+                    val labelValue = (maxVal * i / steps).toInt()
                     Text(
-                        text = "${label}g",
+                        text = "${labelValue}g",
                         color = Color.Gray.copy(alpha = 0.7f),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
@@ -276,7 +335,7 @@ fun MacrosBarChart(stats: List<DailyMacroStats>, user: User) {
 
 @Composable
 fun KcalLineChart(
-    stats: List<DailyMacroStats>,
+    stats: List<StatPoint>,
     targetKcal: Int,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit
@@ -329,7 +388,8 @@ fun KcalLineChart(
                                 stats.forEachIndexed { index, _ ->
                                     val x = index * spacing
                                     val distance = kotlin.math.abs(offset.x - x)
-                                    if (distance < minDistance && distance < spacing / 2) {
+                                    val threshold = if (spacing > 0) spacing / 2 else 50f
+                                    if (distance < minDistance && distance < threshold) {
                                         minDistance = distance
                                         closestIndex = index
                                     }
@@ -445,7 +505,7 @@ fun KcalLineChart(
             ) {
                 stats.forEachIndexed { index, stat ->
                     Text(
-                        text = stat.date,
+                        text = stat.label,
                         color = if (selectedIndex == index) Color.White else Color.Gray,
                         fontSize = 10.sp,
                         fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal
@@ -470,7 +530,7 @@ fun KcalLineChart(
 }
 
 @Composable
-fun ChartTooltip(stat: DailyMacroStats, modifier: Modifier = Modifier) {
+fun ChartTooltip(stat: StatPoint, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -480,7 +540,7 @@ fun ChartTooltip(stat: DailyMacroStats, modifier: Modifier = Modifier) {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = stat.date.uppercase(),
+                text = stat.label.uppercase(),
                 color = Color.Gray,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold
@@ -515,11 +575,17 @@ fun TooltipMacroRow(label: String, value: String) {
 }
 
 @Composable
-fun StatsSummaryCard(stats: List<DailyMacroStats>, user: User) {
+fun StatsSummaryCard(stats: List<StatPoint>, user: User, period: TimeRange) {
+    // Both Weekly and Monthly now show daily average of the data points
     val avgKcal = if (stats.isNotEmpty()) stats.map { it.kcal }.average().toInt() else 0
     val avgPro = if (stats.isNotEmpty()) stats.map { it.proteins }.average().toInt() else 0
     val avgCarb = if (stats.isNotEmpty()) stats.map { it.carbs }.average().toInt() else 0
     val avgFat = if (stats.isNotEmpty()) stats.map { it.fats }.average().toInt() else 0
+
+    // Targets are always the daily ones from the user goals
+    val targetKcal = user.goals.dailyKcal
+    val label = if (period == TimeRange.WEEKLY) "WEEKLY AVERAGE" else "MONTHLY AVERAGE"
+    val unitLabel = "kcal/day avg"
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -527,7 +593,7 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>, user: User) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text("WEEKLY AVERAGE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
@@ -537,7 +603,7 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>, user: User) {
                     fontSize = 32.sp
                 )
                 Text(
-                    text = " / ${user.goals.dailyKcal} kcal avg",
+                    text = " / $targetKcal $unitLabel",
                     color = Color.Gray,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
