@@ -25,22 +25,23 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.DailyMacroStats
 import it.sapienza.smartpantry.model.StatsViewModel
+import it.sapienza.smartpantry.model.User
 
 enum class ChartType {
     CALORIES, MACRONUTRIENTS
 }
 
 @Composable
-fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) {
+fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
     val uiState by statsViewModel.uiState.collectAsState()
     var selectedKcalIndex by remember { mutableStateOf<Int?>(null) }
     var selectedChart by remember { mutableStateOf(ChartType.CALORIES) }
     var expanded by remember { mutableStateOf(false) }
 
     // Load stats when the screen is opened
-    LaunchedEffect(uid) {
-        if (uid.isNotBlank()) {
-            statsViewModel.loadStats(uid)
+    LaunchedEffect(user.uid) {
+        if (user.uid.isNotBlank()) {
+            statsViewModel.loadStats(user.uid)
         }
     }
 
@@ -68,7 +69,7 @@ fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) 
             }
         } else {
             // Summary Card
-            StatsSummaryCard(uiState.weeklyStats)
+            StatsSummaryCard(uiState.weeklyStats, user)
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -133,12 +134,13 @@ fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) 
                             ChartType.CALORIES -> {
                                 KcalLineChart(
                                     stats = uiState.weeklyStats,
+                                    targetKcal = user.goals.dailyKcal,
                                     selectedIndex = selectedKcalIndex,
                                     onSelectedIndexChange = { selectedKcalIndex = it }
                                 )
                             }
                             ChartType.MACRONUTRIENTS -> {
-                                MacrosBarChart(uiState.weeklyStats)
+                                MacrosBarChart(uiState.weeklyStats, user)
                             }
                         }
                     }
@@ -149,7 +151,7 @@ fun StatsScreen(uid: String = "", statsViewModel: StatsViewModel = viewModel()) 
 }
 
 @Composable
-fun MacrosBarChart(stats: List<DailyMacroStats>) {
+fun MacrosBarChart(stats: List<DailyMacroStats>, user: User) {
     if (stats.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No data available", color = Color.Gray)
@@ -161,13 +163,18 @@ fun MacrosBarChart(stats: List<DailyMacroStats>) {
     val avgCarb = stats.map { it.carbs }.average().toFloat()
     val avgFat = stats.map { it.fats }.average().toFloat()
     
+    val targetProteins = (user.goals.macrosTarget["protein"] ?: 0).toFloat()
+    val targetCarbs = (user.goals.macrosTarget["carbs"] ?: 0).toFloat()
+    val targetFats = (user.goals.macrosTarget["fat"] ?: 0).toFloat()
+
     val macros = listOf(
         Triple("Prot", avgPro, Color(0xFFFF5252)),
         Triple("Carb", avgCarb, Color(0xFFFFD740)),
         Triple("Fat", avgFat, Color(0xFF448AFF))
     )
     
-    val maxVal = ((macros.maxOf { it.second } / 50).toInt() + 1) * 50f
+    val targets = listOf(targetProteins, targetCarbs, targetFats)
+    val maxVal = ((maxOf(macros.maxOf { it.second }, targets.maxOf { it }) / 50).toInt() + 1) * 50f
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Y-Axis Labels (Macro Names)
@@ -212,10 +219,11 @@ fun MacrosBarChart(stats: List<DailyMacroStats>) {
                     )
                 }
 
-                // Horizontal Bars
+                // Horizontal Bars and Target Lines
                 macros.forEachIndexed { index, (_, value, color) ->
                     val y = (index * spacing) + (spacing / 2) - (barHeight / 2)
                     val barWidth = (value / maxVal) * width
+                    val targetX = (targets[index] / maxVal) * width
                     
                     // Background track
                     drawRoundRect(
@@ -232,9 +240,17 @@ fun MacrosBarChart(stats: List<DailyMacroStats>) {
                         size = Size(barWidth, barHeight),
                         cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
                     )
-                    
-                    // Value text next to bar if there's space, else inside
-                    // (Simplified: just draw the bars, values are in X-axis or summary)
+
+                    // Target line
+                    if (targets[index] > 0) {
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.8f),
+                            start = Offset(targetX, y - 4.dp.toPx()),
+                            end = Offset(targetX, y + barHeight + 4.dp.toPx()),
+                            strokeWidth = 2.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                        )
+                    }
                 }
             }
             
@@ -261,6 +277,7 @@ fun MacrosBarChart(stats: List<DailyMacroStats>) {
 @Composable
 fun KcalLineChart(
     stats: List<DailyMacroStats>,
+    targetKcal: Int,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit
 ) {
@@ -271,7 +288,7 @@ fun KcalLineChart(
         return
     }
 
-    val maxKcal = stats.maxOfOrNull { it.kcal }?.coerceAtLeast(1) ?: 2000
+    val maxKcal = maxOf(stats.maxOfOrNull { it.kcal } ?: 0, targetKcal).coerceAtLeast(1)
     val yMax = (maxKcal * 1.2f)
 
     Row(modifier = Modifier.fillMaxSize()) {
@@ -341,6 +358,18 @@ fun KcalLineChart(
                         start = Offset(0f, y),
                         end = Offset(width, y),
                         strokeWidth = 1.dp.toPx()
+                    )
+                }
+
+                // Target Kcal Line
+                if (targetKcal > 0) {
+                    val targetY = height - (targetKcal.toFloat() / yMax) * height
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.5f),
+                        start = Offset(0f, targetY),
+                        end = Offset(width, targetY),
+                        strokeWidth = 2.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
                     )
                 }
 
@@ -486,7 +515,7 @@ fun TooltipMacroRow(label: String, value: String) {
 }
 
 @Composable
-fun StatsSummaryCard(stats: List<DailyMacroStats>) {
+fun StatsSummaryCard(stats: List<DailyMacroStats>, user: User) {
     val avgKcal = if (stats.isNotEmpty()) stats.map { it.kcal }.average().toInt() else 0
     val avgPro = if (stats.isNotEmpty()) stats.map { it.proteins }.average().toInt() else 0
     val avgCarb = if (stats.isNotEmpty()) stats.map { it.carbs }.average().toInt() else 0
@@ -508,7 +537,7 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>) {
                     fontSize = 32.sp
                 )
                 Text(
-                    text = " kcal / day",
+                    text = " / ${user.goals.dailyKcal} kcal avg",
                     color = Color.Gray,
                     fontSize = 14.sp,
                     modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
@@ -519,16 +548,20 @@ fun StatsSummaryCard(stats: List<DailyMacroStats>) {
             
             // Macro averages
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                MacroStatSmall("PRO", "${avgPro}g", "🥩")
-                MacroStatSmall("Carb", "${avgCarb}g", "🍞")
-                MacroStatSmall("Fat", "${avgFat}g", "🥑")
+                val targetPro = user.goals.macrosTarget["protein"] ?: 0
+                val targetCarb = user.goals.macrosTarget["carbs"] ?: 0
+                val targetFat = user.goals.macrosTarget["fat"] ?: 0
+                
+                MacroStatSmall("PRO", "${avgPro}g", "${targetPro}g", "🥩")
+                MacroStatSmall("Carb", "${avgCarb}g", "${targetCarb}g", "🍞")
+                MacroStatSmall("Fat", "${avgFat}g", "${targetFat}g", "🥑")
             }
         }
     }
 }
 
 @Composable
-fun MacroStatSmall(label: String, value: String, emoji: String) {
+fun MacroStatSmall(label: String, value: String, target: String, emoji: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -542,7 +575,10 @@ fun MacroStatSmall(label: String, value: String, emoji: String) {
         Spacer(modifier = Modifier.width(8.dp))
         Column {
             Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-            Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(" / $target", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(bottom = 1.dp, start = 2.dp))
+            }
         }
     }
 }

@@ -241,7 +241,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                 ) }
                 composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
                 composable(Screen.Diet.route) { DietScreen(uid = user.uid, dietViewModel = dietViewModel) }
-                composable(Screen.Stats.route) { StatsScreen(uid = user.uid) }
+                composable(Screen.Stats.route) { StatsScreen(user = user) }
                 composable(Screen.Profile.route) {
                     ProfileScreen(
                         user = user,
