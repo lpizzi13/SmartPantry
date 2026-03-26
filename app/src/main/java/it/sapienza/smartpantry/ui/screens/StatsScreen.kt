@@ -31,7 +31,7 @@ enum class ChartType {
 }
 
 enum class TimeRange {
-    WEEKLY, MONTHLY
+    WEEKLY, MONTHLY, YEARLY
 }
 
 // Common UI model to unify Daily and Weekly stats for charts
@@ -59,10 +59,10 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
     }
 
     // Map data based on selection
-    val currentStats = if (selectedPeriod == TimeRange.WEEKLY) {
-        uiState.weeklyStats.map { StatPoint(it.date, it.kcal, it.proteins, it.carbs, it.fats) }
-    } else {
-        uiState.monthlyStats.map { StatPoint(it.week, it.kcal, it.proteins, it.carbs, it.fats) }
+    val currentStats = when (selectedPeriod) {
+        TimeRange.WEEKLY -> uiState.weeklyStats.map { StatPoint(it.date, it.kcal, it.proteins, it.carbs, it.fats) }
+        TimeRange.MONTHLY -> uiState.monthlyStats.map { StatPoint(it.week, it.kcal, it.proteins, it.carbs, it.fats) }
+        TimeRange.YEARLY -> uiState.yearlyStats.map { StatPoint(it.week, it.kcal, it.proteins, it.carbs, it.fats) }
     }
 
     // Reset selection when data changes
@@ -188,7 +188,6 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
                     ) { chart ->
                         when (chart) {
                             ChartType.CALORIES -> {
-                                // Target remains the daily one, as requested.
                                 val targetKcal = user.goals.dailyKcal
 
                                 KcalLineChart(
@@ -576,7 +575,7 @@ fun TooltipMacroRow(label: String, value: String) {
 
 @Composable
 fun StatsSummaryCard(stats: List<StatPoint>, user: User, period: TimeRange) {
-    // Both Weekly and Monthly now show daily average of the data points
+    // All views now show daily average of the data points
     val avgKcal = if (stats.isNotEmpty()) stats.map { it.kcal }.average().toInt() else 0
     val avgPro = if (stats.isNotEmpty()) stats.map { it.proteins }.average().toInt() else 0
     val avgCarb = if (stats.isNotEmpty()) stats.map { it.carbs }.average().toInt() else 0
@@ -584,7 +583,11 @@ fun StatsSummaryCard(stats: List<StatPoint>, user: User, period: TimeRange) {
 
     // Targets are always the daily ones from the user goals
     val targetKcal = user.goals.dailyKcal
-    val label = if (period == TimeRange.WEEKLY) "WEEKLY AVERAGE" else "MONTHLY AVERAGE"
+    val label = when (period) {
+        TimeRange.WEEKLY -> "WEEKLY AVERAGE"
+        TimeRange.MONTHLY -> "MONTHLY AVERAGE"
+        TimeRange.YEARLY -> "YEARLY AVERAGE"
+    }
     val unitLabel = "kcal/day avg"
 
     Card(

@@ -23,6 +23,14 @@ data class WeeklyMacroStats(
     val fats: Int
 )
 
+data class MonthlyMacroStats(
+    val week: String,
+    val kcal: Int,
+    val proteins: Int,
+    val carbs: Int,
+    val fats: Int
+)
+
 // --- API REQUEST/RESPONSE MODELS (Placeholder) ---
 
 data class StatsRequest(val uid: String, val startDate: String, val endDate: String)
@@ -33,6 +41,7 @@ data class StatsResponse(val status: String, val stats: List<DailyMacroStats>)
 data class StatsUiState(
     val weeklyStats: List<DailyMacroStats> = emptyList(),
     val monthlyStats: List<WeeklyMacroStats> = emptyList(),
+    val yearlyStats: List<MonthlyMacroStats> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null
 )
@@ -66,9 +75,25 @@ class StatsViewModel : ViewModel() {
             WeeklyMacroStats("Week 4", 2350, 120, 235, 130)
         )
 
+        val mockYearlyStats = listOf(
+            MonthlyMacroStats("Jan", 1950, 130, 210, 65),
+            MonthlyMacroStats("Feb", 2050, 135, 240, 70),
+            MonthlyMacroStats("Mar", 1900, 125, 215, 62),
+            MonthlyMacroStats("Apr", 2100, 140, 250, 75),
+            MonthlyMacroStats("May", 2000, 128, 230, 68),
+            MonthlyMacroStats("Jun", 2300, 145, 280, 85),
+            MonthlyMacroStats("Jul", 2450, 150, 300, 90),
+            MonthlyMacroStats("Aug", 2200, 138, 260, 78),
+            MonthlyMacroStats("Sep", 2100, 132, 245, 72),
+            MonthlyMacroStats("Oct", 2250, 142, 270, 80),
+            MonthlyMacroStats("Nov", 1950, 120, 220, 66),
+            MonthlyMacroStats("Dec", 2350, 148, 285, 88)
+        )
+
         _uiState.value = StatsUiState(
             weeklyStats = mockWeeklyStats,
             monthlyStats = mockMonthlyStats,
+            yearlyStats = mockYearlyStats,
             isLoading = false
         )
     }
