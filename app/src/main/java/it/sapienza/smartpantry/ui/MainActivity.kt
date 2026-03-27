@@ -233,6 +233,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                     onOpenSearchFood = {
                         val intent = Intent(context, SearchFoodActivity::class.java)
                         intent.putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
+                        intent.putExtra(SearchFoodActivity.EXTRA_SOURCE, SearchFoodActivity.SOURCE_PANTRY)
                         context.startActivity(intent)
                     }
                 ) }

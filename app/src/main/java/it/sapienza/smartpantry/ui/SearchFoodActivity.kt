@@ -85,10 +85,16 @@ class SearchFoodActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val uid = intent.getStringExtra(EXTRA_UID).orEmpty()
+        val source = intent.getStringExtra(EXTRA_SOURCE).orEmpty()
+        val homeDateKey = intent.getStringExtra(EXTRA_HOME_DATE_KEY).orEmpty()
+        val homeMealType = intent.getStringExtra(EXTRA_HOME_MEAL_TYPE).orEmpty()
         setContent {
             MaterialTheme {
                 SearchFoodActivityContent(
                     uid = uid,
+                    source = source,
+                    homeDateKey = homeDateKey,
+                    homeMealType = homeMealType,
                     onClose = { finish() }
                 )
             }
@@ -97,6 +103,12 @@ class SearchFoodActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_UID = "search_food_uid"
+        const val EXTRA_SOURCE = "search_food_source"
+        const val EXTRA_HOME_DATE_KEY = "search_food_home_date_key"
+        const val EXTRA_HOME_MEAL_TYPE = "search_food_home_meal_type"
+
+        const val SOURCE_PANTRY = "pantry"
+        const val SOURCE_HOME = "home"
     }
 }
 
@@ -104,6 +116,9 @@ class SearchFoodActivity : ComponentActivity() {
 @Composable
 private fun SearchFoodActivityContent(
     uid: String,
+    source: String,
+    homeDateKey: String,
+    homeMealType: String,
     onClose: () -> Unit,
     pantryViewModel: PantryViewModel = viewModel()
 ) {
@@ -111,12 +126,29 @@ private fun SearchFoodActivityContent(
     val activity = context as? Activity
     val uiState by pantryViewModel.uiState.collectAsState()
 
-    LaunchedEffect(uid) {
-        if (uid.isNotBlank()) pantryViewModel.bindToUser(uid)
+    val isHomeMode = remember(source, homeDateKey, homeMealType) {
+        source.equals(SearchFoodActivity.SOURCE_HOME, ignoreCase = true) &&
+            homeDateKey.isNotBlank() &&
+            homeMealType.lowercase() in setOf("breakfast", "lunch", "dinner", "snacks")
+    }
+    val normalizedMode = if (isHomeMode) PantryViewModel.SEARCH_MODE_HOME else PantryViewModel.SEARCH_MODE_PANTRY
+
+    LaunchedEffect(uid, normalizedMode, homeDateKey, homeMealType) {
+        pantryViewModel.configureSearchSession(
+            mode = normalizedMode,
+            homeDateKey = homeDateKey.takeIf { it.isNotBlank() },
+            homeMealType = homeMealType.takeIf { it.isNotBlank() }
+        )
+        if (uid.isNotBlank()) pantryViewModel.bindToUser(uid, refreshPantry = !isHomeMode)
     }
     LaunchedEffect(Unit) {
         pantryViewModel.events.collectLatest { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+    LaunchedEffect(isHomeMode) {
+        if (isHomeMode) {
+            pantryViewModel.saveCompleted.collectLatest { onClose() }
         }
     }
 
@@ -139,13 +171,20 @@ private fun SearchFoodActivityContent(
             .build()
     }
     val scanner = remember(activity) { activity?.let { GmsBarcodeScanning.getClient(it, scannerOptions) } }
-    val pantryById = remember(uiState.pantryItems) { uiState.pantryItems.associateBy { it.openFoodFactsId } }
+    val pantryById = remember(uiState.pantryItems, isHomeMode) {
+        if (isHomeMode) emptyMap<String, PantryItem>() else uiState.pantryItems.associateBy { it.openFoodFactsId }
+    }
 
     Scaffold(
         containerColor = SearchBackgroundColor,
         topBar = {
             TopAppBar(
-                title = { Text("Search food") },
+                title = {
+                    Text(
+                        if (isHomeMode) "Add to ${mealTypeLabel(homeMealType)}"
+                        else "Search food"
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = SearchBackgroundColor,
                     titleContentColor = SearchTextPrimary,
@@ -222,6 +261,7 @@ private fun SearchFoodActivityContent(
                     .weight(1f, fill = true),
                 state = uiState,
                 pantryById = pantryById,
+                showPantryQuantity = !isHomeMode,
                 onSelectProduct = pantryViewModel::openEditorFromSearchResult
             )
             Spacer(modifier = Modifier.height(10.dp))
@@ -241,6 +281,7 @@ private fun SearchFoodActivityContent(
             onProtChange = pantryViewModel::onEditorProtChange,
             onFatChange = pantryViewModel::onEditorFatChange,
             onPackageWeightGramsChange = pantryViewModel::onEditorPackageWeightGramsChange,
+            isHomeMode = isHomeMode,
             onSave = pantryViewModel::saveEditor
         )
     }
@@ -276,6 +317,7 @@ private fun SearchResultsSection(
     modifier: Modifier = Modifier,
     state: PantryUiState,
     pantryById: Map<String, PantryItem>,
+    showPantryQuantity: Boolean,
     onSelectProduct: (OpenFoodFactsProduct) -> Unit
 ) {
     Card(
@@ -374,7 +416,7 @@ private fun SearchResultsSection(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = SearchTextSecondary
                                             )
-                                            uiModel.alreadyInPantryQuantity?.let {
+                                            if (showPantryQuantity) uiModel.alreadyInPantryQuantity?.let {
                                                 Text(
                                                     "Already in pantry: $it",
                                                     style = MaterialTheme.typography.bodySmall,
@@ -410,6 +452,7 @@ private fun FoodEditorDialog(
     onProtChange: (String) -> Unit,
     onFatChange: (String) -> Unit,
     onPackageWeightGramsChange: (String) -> Unit,
+    isHomeMode: Boolean,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -475,23 +518,27 @@ private fun FoodEditorDialog(
                 OutlinedTextField(
                     value = state.editorQuantityInput,
                     onValueChange = onQuantityChange,
-                    label = { Text("Quantity") },
+                    label = { Text(if (isHomeMode) "Grams" else "Quantity") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (isHomeMode) KeyboardType.Decimal else KeyboardType.Number
+                    ),
                     shape = RoundedCornerShape(14.dp),
                     colors = searchFieldColors()
                 )
-                OutlinedTextField(
-                    value = state.editorPackageWeightGramsInput,
-                    onValueChange = onPackageWeightGramsChange,
-                    label = { Text("Package weight (g)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
+                if (!isHomeMode) {
+                    OutlinedTextField(
+                        value = state.editorPackageWeightGramsInput,
+                        onValueChange = onPackageWeightGramsChange,
+                        label = { Text("Package weight (g)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                }
             }
         },
         confirmButton = {
@@ -559,3 +606,14 @@ private fun searchBarFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTrailingIconColor = SearchAccentColor,
     unfocusedTrailingIconColor = SearchTextSecondary
 )
+
+private fun mealTypeLabel(value: String): String {
+    val normalized = value.trim().lowercase()
+    return when (normalized) {
+        "breakfast" -> "Breakfast"
+        "lunch" -> "Lunch"
+        "dinner" -> "Dinner"
+        "snacks" -> "Snacks"
+        else -> "Meal"
+    }
+}
