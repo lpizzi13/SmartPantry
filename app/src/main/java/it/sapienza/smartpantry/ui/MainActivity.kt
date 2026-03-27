@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,9 +35,6 @@ import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,8 +97,6 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
     val currentDestination = navBackStackEntry?.destination
 
     var user by remember { mutableStateOf(initialUser) }
-    val today = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH).format(Date())
-
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     val neonGreen = Color(0xFF00E676)
     val unselectedGrey = Color.Gray
@@ -124,7 +118,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = today, color = Color.White, fontWeight = FontWeight.Bold) },
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
                         Icon(

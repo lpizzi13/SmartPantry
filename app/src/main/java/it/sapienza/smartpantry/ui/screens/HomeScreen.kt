@@ -1,6 +1,7 @@
 package it.sapienza.smartpantry.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,13 +16,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import it.sapienza.smartpantry.model.User
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(user: User) {
     val scrollState = rememberScrollState()
+    var selectedDate by remember { mutableStateOf(startOfDay(Calendar.getInstance())) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateLabel = remember(selectedDate.timeInMillis) { formatHomeDateLabel(selectedDate) }
 
     // I valori iniziali partono tutti da 0
     val consumedKcal = 0
@@ -36,6 +46,15 @@ fun HomeScreen(user: User) {
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .verticalScroll(scrollState)
     ) {
+        HomeCalendarHeader(
+            dateLabel = dateLabel,
+            onPreviousDay = { selectedDate = shiftSelectedDate(selectedDate, -1) },
+            onNextDay = { selectedDate = shiftSelectedDate(selectedDate, 1) },
+            onOpenCalendar = { showDatePicker = true }
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
         SectionHeader("Daily Nutrition")
         NutritionCard(
             user = user,
@@ -55,6 +74,148 @@ fun HomeScreen(user: User) {
         MealItem("Snacks", "Not consumed yet", Icons.Default.Icecream) { }
         
         Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = localDateToUtcMillis(selectedDate)
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { selectedMillis ->
+                            selectedDate = utcMillisToLocalDate(selectedMillis)
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("Select")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                showModeToggle = false
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeCalendarHeader(
+    dateLabel: String,
+    onPreviousDay: () -> Unit,
+    onNextDay: () -> Unit,
+    onOpenCalendar: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF1A2421)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onPreviousDay) {
+                Icon(
+                    imageVector = Icons.Default.ChevronLeft,
+                    contentDescription = "Previous day",
+                    tint = Color(0xFF00E676)
+                )
+            }
+            Text(
+                text = dateLabel,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onNextDay)
+                    .padding(vertical = 12.dp)
+            )
+            IconButton(onClick = onNextDay) {
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Next day",
+                    tint = Color(0xFF00E676)
+                )
+            }
+            IconButton(onClick = onOpenCalendar) {
+                Icon(
+                    imageVector = Icons.Default.CalendarMonth,
+                    contentDescription = "Open calendar",
+                    tint = Color(0xFF00E676)
+                )
+            }
+        }
+    }
+}
+
+private fun startOfDay(calendar: Calendar): Calendar =
+    (calendar.clone() as Calendar).apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+
+private fun shiftSelectedDate(date: Calendar, days: Int): Calendar =
+    startOfDay((date.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, days) })
+
+private fun isSameDay(first: Calendar, second: Calendar): Boolean =
+    first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
+        first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
+
+private fun formatHomeDateLabel(selectedDate: Calendar): String {
+    val locale = Locale.ENGLISH
+    val normalizedSelectedDate = startOfDay(selectedDate)
+    val today = startOfDay(Calendar.getInstance())
+    val yesterday = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+    val tomorrow = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+
+    val dayPrefix = when {
+        isSameDay(normalizedSelectedDate, yesterday) -> "YESTERDAY"
+        isSameDay(normalizedSelectedDate, today) -> "TODAY"
+        isSameDay(normalizedSelectedDate, tomorrow) -> "TOMORROW"
+        else -> SimpleDateFormat("EEEE", locale).format(normalizedSelectedDate.time).uppercase(locale)
+    }
+    val dayMonth = SimpleDateFormat("d MMM", locale).format(normalizedSelectedDate.time).lowercase(locale)
+    return "$dayPrefix, $dayMonth"
+}
+
+private fun localDateToUtcMillis(localDate: Calendar): Long =
+    Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(
+            localDate.get(Calendar.YEAR),
+            localDate.get(Calendar.MONTH),
+            localDate.get(Calendar.DAY_OF_MONTH)
+        )
+    }.timeInMillis
+
+private fun utcMillisToLocalDate(utcMillis: Long): Calendar {
+    val utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        timeInMillis = utcMillis
+    }
+    return Calendar.getInstance().apply {
+        clear()
+        set(
+            utcCalendar.get(Calendar.YEAR),
+            utcCalendar.get(Calendar.MONTH),
+            utcCalendar.get(Calendar.DAY_OF_MONTH)
+        )
     }
 }
 
