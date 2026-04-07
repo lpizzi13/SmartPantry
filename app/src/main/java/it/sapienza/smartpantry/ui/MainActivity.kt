@@ -36,6 +36,10 @@ import it.sapienza.smartpantry.ui.screens.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import it.sapienza.smartpantry.ui.screens.DietScreen
+import it.sapienza.smartpantry.ui.screens.HomeScreen
+import it.sapienza.smartpantry.ui.screens.PantryScreen
+import it.sapienza.smartpantry.ui.screens.ProfileScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,7 +108,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
     val neonGreen = Color(0xFF00E676)
     val unselectedGrey = Color.Gray
 
-    // Prefetch profile image and initialize diet data
+    // Prefetch profile image to avoid delay in ProfileScreen
     val context = LocalContext.current
     LaunchedEffect(user.uid, user.profileImageUrl) {
         if (user.uid.isNotBlank()) {
@@ -236,6 +240,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                     onOpenSearchFood = {
                         val intent = Intent(context, SearchFoodActivity::class.java)
                         intent.putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
+                        intent.putExtra(SearchFoodActivity.EXTRA_SOURCE, SearchFoodActivity.SOURCE_PANTRY)
                         context.startActivity(intent)
                     }
                 ) }

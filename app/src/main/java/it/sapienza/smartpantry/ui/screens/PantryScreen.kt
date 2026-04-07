@@ -61,6 +61,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.*
+import it.sapienza.smartpantry.service.HomeAddNutrients
+import it.sapienza.smartpantry.service.HomeAddRequest
 import it.sapienza.smartpantry.service.PantryAddNutrients
 import it.sapienza.smartpantry.service.PantryAddRequest
 import it.sapienza.smartpantry.service.PantryGramsRequest
@@ -99,6 +101,12 @@ data class PantryUiState(
 )
 
 class PantryViewModel : ViewModel() {
+    companion object {
+        const val SEARCH_MODE_PANTRY = "pantry"
+        const val SEARCH_MODE_HOME = "home"
+        private val HOME_MEAL_TYPES = setOf("breakfast", "lunch", "dinner", "snacks")
+    }
+
     data class BarcodeResolution(
         val openFoodFactsId: String? = null,
         val productName: String? = null,
@@ -123,19 +131,51 @@ class PantryViewModel : ViewModel() {
     val uiState = _uiState.asStateFlow()
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
+    private val _saveCompleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val saveCompleted = _saveCompleted.asSharedFlow()
 
     private var currentUid = ""
     private var currentEditorTarget: EditorTarget? = null
     private var searchJob: Job? = null
     private var latestSearchToken: Long = 0L
+    private var activeSearchMode = SEARCH_MODE_PANTRY
+    private var activeHomeDateKey: String? = null
+    private var activeHomeMealType: String? = null
 
-    fun bindToUser(uid: String) {
+    fun configureSearchSession(
+        mode: String,
+        homeDateKey: String? = null,
+        homeMealType: String? = null
+    ) {
+        val normalizedMode = mode.trim().lowercase(Locale.ROOT)
+        val normalizedMealType = homeMealType?.trim()?.lowercase(Locale.ROOT)
+        val isValidHomeSession = normalizedMode == SEARCH_MODE_HOME &&
+            !homeDateKey.isNullOrBlank() &&
+            !normalizedMealType.isNullOrBlank() &&
+            normalizedMealType in HOME_MEAL_TYPES
+
+        if (isValidHomeSession) {
+            activeSearchMode = SEARCH_MODE_HOME
+            activeHomeDateKey = homeDateKey
+            activeHomeMealType = normalizedMealType
+        } else {
+            activeSearchMode = SEARCH_MODE_PANTRY
+            activeHomeDateKey = null
+            activeHomeMealType = null
+        }
+    }
+
+    fun bindToUser(uid: String, refreshPantry: Boolean = true) {
         if (uid.isBlank()) {
             emitEvent("User not authenticated. Please log in again.")
             return
         }
         currentUid = uid
-        refreshPantry()
+        if (refreshPantry) {
+            refreshPantry()
+        } else {
+            _uiState.update { it.copy(pantryItems = emptyList()) }
+        }
     }
 
     fun refreshPantry() {
@@ -165,6 +205,12 @@ class PantryViewModel : ViewModel() {
     fun dismissEditor() {
         currentEditorTarget = null
         _uiState.update { it.copy(isEditorVisible = false) }
+    }
+
+    private fun isHomeModeActive(): Boolean {
+        return activeSearchMode == SEARCH_MODE_HOME &&
+            !activeHomeDateKey.isNullOrBlank() &&
+            !activeHomeMealType.isNullOrBlank()
     }
 
     fun searchProducts() {
@@ -219,10 +265,11 @@ class PantryViewModel : ViewModel() {
             emitEvent("Invalid product code.")
             return
         }
+        val defaultAmount = if (isHomeModeActive()) 100L else 1L
         currentEditorTarget = EditorTarget.AddWithId(openFoodFactsId)
         openEditorWithValues(
             name = displayName(product),
-            quantity = 1L,
+            quantity = defaultAmount,
             kcal = product.resolvedKcal(),
             carbs = product.resolvedCarbs(),
             prot = product.resolvedProt(),
@@ -232,10 +279,11 @@ class PantryViewModel : ViewModel() {
     }
 
     fun openEditorFromManualEntry() {
+        val defaultAmount = if (isHomeModeActive()) 100L else 1L
         currentEditorTarget = EditorTarget.AddManual
         openEditorWithValues(
             name = _uiState.value.searchQuery.trim(),
-            quantity = 1L,
+            quantity = defaultAmount,
             kcal = 0.0,
             carbs = 0.0,
             prot = 0.0,
@@ -330,55 +378,113 @@ class PantryViewModel : ViewModel() {
             emitEvent("Food name is required.")
             return
         }
-        val quantity = parseQuantityOrNull(state.editorQuantityInput) ?: return
+        val isHomeMode = isHomeModeActive()
+        val grams = if (isHomeMode) {
+            parsePositiveDecimalOrNull(state.editorQuantityInput, "Grams") ?: return
+        } else {
+            null
+        }
+        val quantity = if (isHomeMode) {
+            null
+        } else {
+            parseQuantityOrNull(state.editorQuantityInput) ?: return
+        }
         val kcal = parseMacroOrNull(state.editorKcalInput, "Kcal") ?: return
         val carbs = parseMacroOrNull(state.editorCarbsInput, "Carbs") ?: return
         val prot = parseMacroOrNull(state.editorProtInput, "Protein") ?: return
         val fat = parseMacroOrNull(state.editorFatInput, "Fat") ?: return
-        val packageWeightGrams = parseMacroOrNull(
-            state.editorPackageWeightGramsInput,
-            "Package weight (g)"
-        ) ?: return
+        val packageWeightGrams = if (isHomeMode) {
+            0.0
+        } else {
+            parseMacroOrNull(
+                state.editorPackageWeightGramsInput,
+                "Package weight (g)"
+            ) ?: return
+        }
 
         _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
-                val result = when (target) {
-                    is EditorTarget.AddWithId -> addPantryItem(
-                        currentUid,
-                        target.openFoodFactsId,
-                        name,
-                        quantity,
-                        kcal,
-                        prot,
-                        fat,
-                        carbs,
-                        packageWeightGrams
-                    )
-                    is EditorTarget.AddManual -> addPantryItem(
-                        currentUid,
-                        null,
-                        name,
-                        quantity,
-                        kcal,
-                        prot,
-                        fat,
-                        carbs,
-                        packageWeightGrams
-                    )
+                val result = if (isHomeMode) {
+                    val dateKey = activeHomeDateKey
+                    val mealType = activeHomeMealType
+                    if (dateKey.isNullOrBlank() || mealType.isNullOrBlank()) {
+                        emitEvent("Missing home date or meal.")
+                        return@launch
+                    }
+                    when (target) {
+                        is EditorTarget.AddWithId -> addHomeItem(
+                            uid = currentUid,
+                            dateKey = dateKey,
+                            mealType = mealType,
+                            openFoodFactsId = target.openFoodFactsId,
+                            source = "openfoodfacts",
+                            productName = name,
+                            grams = grams ?: 0.0,
+                            kcal = kcal,
+                            prot = prot,
+                            fat = fat,
+                            carbs = carbs
+                        )
+                        is EditorTarget.AddManual -> addHomeItem(
+                            uid = currentUid,
+                            dateKey = dateKey,
+                            mealType = mealType,
+                            openFoodFactsId = null,
+                            source = "manual",
+                            productName = name,
+                            grams = grams ?: 0.0,
+                            kcal = kcal,
+                            prot = prot,
+                            fat = fat,
+                            carbs = carbs
+                        )
+                    }
+                } else {
+                    when (target) {
+                        is EditorTarget.AddWithId -> addPantryItem(
+                            currentUid,
+                            target.openFoodFactsId,
+                            name,
+                            quantity ?: 1L,
+                            kcal,
+                            prot,
+                            fat,
+                            carbs,
+                            packageWeightGrams
+                        )
+                        is EditorTarget.AddManual -> addPantryItem(
+                            currentUid,
+                            null,
+                            name,
+                            quantity ?: 1L,
+                            kcal,
+                            prot,
+                            fat,
+                            carbs,
+                            packageWeightGrams
+                        )
+                    }
                 }
                 if (result.isSuccess) {
-                    val refresh = refreshPantryFromBackend(currentUid)
-                    if (refresh.isFailure) {
-                        emitEvent(
-                            "Unable to load pantry: ${
-                                refresh.exceptionOrNull()?.localizedMessage ?: "unknown error"
-                            }"
-                        )
+                    if (!isHomeMode) {
+                        val refresh = refreshPantryFromBackend(currentUid)
+                        if (refresh.isFailure) {
+                            emitEvent(
+                                "Unable to load pantry: ${
+                                    refresh.exceptionOrNull()?.localizedMessage ?: "unknown error"
+                                }"
+                            )
+                        }
+                    } else {
+                        _saveCompleted.tryEmit(Unit)
                     }
                     _uiState.update { it.copy(isEditorVisible = false) }
                     currentEditorTarget = null
-                    emitEvent("Item added to pantry.")
+                    emitEvent(
+                        if (isHomeMode) "Item added to ${activeHomeMealType.orEmpty()}."
+                        else "Item added to pantry."
+                    )
                 } else {
                     emitEvent(
                         "Operation failed: ${result.exceptionOrNull()?.localizedMessage ?: "unknown error"}"
@@ -457,6 +563,15 @@ class PantryViewModel : ViewModel() {
             return null
         }
         return quantity
+    }
+
+    private fun parsePositiveDecimalOrNull(value: String, fieldName: String): Double? {
+        val parsed = value.trim().replace(',', '.').toDoubleOrNull()
+        if (parsed == null || !parsed.isFinite() || parsed <= 0.0) {
+            emitEvent("$fieldName must be a number greater than 0.")
+            return null
+        }
+        return parsed
     }
 
     private fun parseMacroOrNull(value: String, fieldName: String): Double? {
@@ -610,6 +725,60 @@ class PantryViewModel : ViewModel() {
             }
         } catch (_: Exception) {
             Result.failure(IllegalStateException("Unable to add item."))
+        }
+    }
+
+    private suspend fun addHomeItem(
+        uid: String,
+        dateKey: String,
+        mealType: String,
+        openFoodFactsId: String?,
+        source: String,
+        productName: String,
+        grams: Double,
+        kcal: Double,
+        prot: Double,
+        fat: Double,
+        carbs: Double
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (dateKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("dateKey is required."))
+        }
+        if (mealType !in HOME_MEAL_TYPES) {
+            return@withContext Result.failure(IllegalArgumentException("Invalid meal type."))
+        }
+        if (!grams.isFinite() || grams <= 0.0) {
+            return@withContext Result.failure(IllegalArgumentException("Grams must be greater than 0."))
+        }
+
+        try {
+            val response = api.addHomeEntry(
+                HomeAddRequest(
+                    uid = uid,
+                    dateKey = dateKey,
+                    openFoodFactsId = openFoodFactsId?.takeIf { it.isNotBlank() },
+                    mealType = mealType,
+                    source = source,
+                    productName = productName.trim().ifBlank { "Unnamed product" },
+                    grams = sanitizeMacro(grams),
+                    nutrients = HomeAddNutrients(
+                        kcal = sanitizeMacro(kcal),
+                        carbs = sanitizeMacro(carbs),
+                        protein = sanitizeMacro(prot),
+                        fat = sanitizeMacro(fat)
+                    )
+                )
+            ).execute()
+
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(
+                    IllegalStateException(parseBackendError(response, "Unable to add item to home."))
+                )
+            }
+        } catch (_: Exception) {
+            Result.failure(IllegalStateException("Unable to add item to home."))
         }
     }
 
