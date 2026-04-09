@@ -106,3 +106,9 @@ data class PantryGramsRequest(
         ) { "Either openFoodFactsId or productName is required." }
     }
 }
+
+data class PantryDeleteRequest(
+    val uid: String,
+    val openFoodFactsId: String? = null,
+    val productName: String? = null
+)

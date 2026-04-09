@@ -103,29 +103,24 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
 
     var user by remember { mutableStateOf(initialUser) }
     val today = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH).format(Date())
+    val context = LocalContext.current
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
+    val darkBackground = Color(0xFF0A120E)
     val neonGreen = Color(0xFF00E676)
     val unselectedGrey = Color.Gray
 
-    // Prefetch profile image to avoid delay in ProfileScreen
-    val context = LocalContext.current
-    LaunchedEffect(user.uid, user.profileImageUrl) {
-        if (user.uid.isNotBlank()) {
-            dietViewModel.initialize(user.uid)
-        }
-        if (user.profileImageUrl.isNotEmpty()) {
-            val request = ImageRequest.Builder(context)
-                .data(user.profileImageUrl)
-                .build()
-            context.imageLoader.enqueue(request)
-        }
-    }
-
     Scaffold(
+        containerColor = darkBackground,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = today, color = Color.White, fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = darkBackground,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = unselectedGrey,
+                    actionIconContentColor = unselectedGrey
+                ),
                 navigationIcon = {
                     IconButton(onClick = onLogout) {
                         Icon(
@@ -172,16 +167,12 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                             tint = if (isProfileSelected) neonGreen else unselectedGrey
                         )
                     }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = Color.White
-                )
+                }
             )
         },
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = darkBackground,
                 tonalElevation = 0.dp
             ) {
                 bottomItems.forEach { screen ->
@@ -227,7 +218,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
     ) { innerPadding ->
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
+            color = darkBackground
         ) {
             NavHost(
                 navController = navController,

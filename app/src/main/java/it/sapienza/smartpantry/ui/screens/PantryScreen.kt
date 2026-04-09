@@ -23,8 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -756,8 +759,13 @@ fun PantryScreen(
     val categorizedItems = remember(uiState.pantryItems) {
         groupPantryItemsByCategory(uiState.pantryItems)
     }
-    val filteredItems = remember(uiState.pantryItems, selectedCategory) {
-        selectedCategory?.let { category -> categorizedItems[category].orEmpty() } ?: uiState.pantryItems
+    val filteredItems = remember(uiState.pantryItems, selectedCategory, uiState.searchQuery) {
+        val base = selectedCategory?.let { category -> categorizedItems[category].orEmpty() } ?: uiState.pantryItems
+        if (uiState.searchQuery.isBlank()) {
+            base
+        } else {
+            base.filter { it.productName.contains(uiState.searchQuery, ignoreCase = true) }
+        }
     }
 
     LaunchedEffect(uid) {
@@ -791,35 +799,40 @@ fun PantryScreen(
         return
     }
 
-    Scaffold(
-        containerColor = PantryBackgroundColor,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onOpenSearchFood,
-                containerColor = PantryAccentColor,
-                contentColor = Color.Black,
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add item")
-            }
-        }
-    ) { innerPadding ->
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(PantryBackgroundColor)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            val currentCategory = selectedCategory
-            Text(
-                text = if (currentCategory == null) {
-                    "${uiState.pantryItems.size} ITEMS TOTAL"
-                } else {
-                    "${currentCategory.label.uppercase()}: ${filteredItems.size} ITEMS"
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = { pantryViewModel.onSearchQueryChange(it) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search in pantry...", color = Color.Gray) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = PantryAccentColor) },
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { pantryViewModel.onSearchQueryChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray)
+                        }
+                    }
                 },
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = PantryAccentColor
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PantryAccentColor,
+                    unfocusedBorderColor = PantryBorderColor,
+                    cursorColor = PantryAccentColor,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                )
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -867,6 +880,18 @@ fun PantryScreen(
                     }
                 }
             }
+        }
+
+        FloatingActionButton(
+            onClick = onOpenSearchFood,
+            containerColor = PantryAccentColor,
+            contentColor = Color.Black,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add item")
         }
     }
 
