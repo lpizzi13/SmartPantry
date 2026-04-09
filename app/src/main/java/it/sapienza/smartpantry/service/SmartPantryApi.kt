@@ -36,12 +36,42 @@ interface SmartPantryApi {
     @POST("pantry/add")
     fun addToPantry(@Body request: PantryAddRequest): Call<Unit>
 
+    fun addPantryItem(@Body request: PantryAddRequest): Call<Unit> = addToPantry(request)
+
     @PATCH("pantry/grams")
     fun updateItemGrams(@Body request: PantryGramsRequest): Call<Unit>
 
+    @POST("pantry/delete")
+    fun deletePantryItem(@Body request: PantryDeleteRequest): Call<Unit>
+
     @GET("pantry/{uid}")
     fun getPantry(@Path("uid") uid: String): Call<PantryResponse>
+
+    @POST("generate_shopping_list")
+    fun generateShoppingList(@Body request: GenerateShoppingListRequest): Call<List<ShoppingListItem>>
+
+    @POST("get_shopping_list")
+    fun getShoppingList(@Body request: GetShoppingListRequest): Call<GetShoppingListResponse>
+
+    @POST("update_shopping_list")
+    fun updateShoppingList(@Body request: UpdateShoppingListRequest): Call<UpdateShoppingListResponse>
 }
+
+data class GetShoppingListRequest(val uid: String)
+data class GetShoppingListResponse(val status: String, val shoppingList: List<ShoppingListItem>)
+
+data class UpdateShoppingListRequest(
+    val uid: String,
+    val shoppingList: List<ShoppingListItem>? = null,
+    val item: ShoppingListItem? = null,
+    val replace: Boolean = false
+)
+data class UpdateShoppingListResponse(val status: String, val updatedCount: Int, val replace: Boolean)
+
+data class GenerateShoppingListRequest(
+    val uid: String,
+    val selectedDietId: String
+)
 
 data class PantryAddRequest(
     val uid: String,

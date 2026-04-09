@@ -36,6 +36,7 @@ import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
+import it.sapienza.smartpantry.ui.screens.ShoppingListScreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -242,7 +243,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                         context.startActivity(intent)
                     }
                 ) }
-                composable(Screen.ShopList.route) { PlaceholderScreen(stringResource(id = R.string.text_shop_list_screen)) }
+                composable(Screen.ShopList.route) { ShoppingListScreen(uid = user.uid, dietViewModel = dietViewModel) }
                 composable(Screen.Diet.route) { DietScreen(uid = user.uid, dietViewModel = dietViewModel) }
                 composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
                 composable(Screen.Profile.route) {
