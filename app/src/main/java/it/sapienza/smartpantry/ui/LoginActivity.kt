@@ -92,6 +92,7 @@ class LoginActivity : ComponentActivity() {
                         composable("login") {
                             LoginScreen(
                                 isLoading = isLoggingIn,
+                                errorMessage = errorMessage,
                                 onLoginClick = { email, password -> loginUser(email, password) },
                                 onRegisterClick = { navController.navigate("signup") },
                                 onForgotPasswordClick = { showForgotDialog = true }
@@ -211,12 +212,15 @@ class LoginActivity : ComponentActivity() {
                 if (response.isSuccessful) {
                     navigateToMain(response.body()?.userData)
                 } else {
-                    // Fallback to minimal user if backend sync fails
-                    navigateToMain(User(uid = uid, email = email))
+                    isLoadingSession = false
+                    isLoggingIn = false
+                    errorMessage = "Server error. Please try again later."
                 }
             }
             override fun onFailure(call: Call<UserResponse>, t: Throwable) {
-                navigateToMain(User(uid = uid, email = email))
+                isLoadingSession = false
+                isLoggingIn = false
+                errorMessage = "Server connection failed. Please try again later."
             }
         })
     }
@@ -301,6 +305,7 @@ fun ForgotPasswordDialog(onDismiss: () -> Unit, onSendClick: (String) -> Unit) {
 @Composable
 fun LoginScreen(
     isLoading: Boolean,
+    errorMessage: String?,
     onLoginClick: (String, String) -> Unit,
     onRegisterClick: () -> Unit,
     onForgotPasswordClick: () -> Unit
@@ -360,6 +365,15 @@ fun LoginScreen(
         )
 
         Spacer(modifier = Modifier.height(40.dp))
+
+        errorMessage?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 16.dp),
+                textAlign = TextAlign.Center
+            )
+        }
 
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(text = "Email Address", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp))

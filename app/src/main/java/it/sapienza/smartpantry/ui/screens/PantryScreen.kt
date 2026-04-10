@@ -393,7 +393,7 @@ class PantryViewModel : ViewModel() {
         }
     }
 
-    fun handleScannedBarcode(scannedCode: String) {
+    fun handleScannedBarcode(scannedCode: String, overridingName: String? = null) {
         if (currentUid.isBlank()) {
             onScanStateChanged(false)
             emitEvent("User not authenticated. Please log in again.")
@@ -409,12 +409,25 @@ class PantryViewModel : ViewModel() {
             try {
                 val resolution = resolveBarcodeFromBackend(cleanCode)
                 if (!resolution.isSuccess) {
-                    emitEvent(resolution.errorMessage ?: "Barcode lookup failed.")
+                    if (overridingName != null) {
+                        currentEditorTarget = EditorTarget.AddWithId(cleanCode)
+                        openEditorWithValues(
+                            name = overridingName,
+                            quantity = 1L,
+                            kcal = 0.0,
+                            carbs = 0.0,
+                            prot = 0.0,
+                            fat = 0.0,
+                            packageWeightGrams = 0.0
+                        )
+                    } else {
+                        emitEvent(resolution.errorMessage ?: "Barcode lookup failed.")
+                    }
                     return@launch
                 }
                 currentEditorTarget = EditorTarget.AddWithId(resolution.openFoodFactsId.orEmpty())
                 openEditorWithValues(
-                    name = resolution.productName ?: "Unnamed product",
+                    name = overridingName ?: resolution.productName ?: "Unnamed product",
                     quantity = 1L,
                     kcal = resolution.kcal,
                     carbs = resolution.carbs,

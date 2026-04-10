@@ -1,5 +1,10 @@
 package it.sapienza.smartpantry.ui.screens
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,6 +66,38 @@ fun ShoppingListScreen(
     var newItemName by remember { mutableStateOf("") }
     var isGenerating by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    var showClearDialog by remember { mutableStateOf(false) }
+
+    // Shake detector logic
+    DisposableEffect(context) {
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        val shakeListener = object : SensorEventListener {
+            private var lastShakeTime: Long = 0
+            override fun onSensorChanged(event: SensorEvent?) {
+                if (event == null) return
+                val x = event.values[0]
+                val y = event.values[1]
+                val z = event.values[2]
+
+                val acceleration = kotlin.math.sqrt((x * x + y * y + z * z).toDouble()) - SensorManager.GRAVITY_EARTH
+                if (acceleration > 20) {
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastShakeTime > 1500) {
+                        lastShakeTime = currentTime
+                        showClearDialog = true
+                    }
+                }
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        sensorManager.registerListener(shakeListener, accelerometer, SensorManager.SENSOR_DELAY_UI)
+        onDispose {
+            sensorManager.unregisterListener(shakeListener)
+        }
+    }
 
     // Initialize PantryViewModel and collect events
     LaunchedEffect(uid) {
@@ -141,7 +178,10 @@ fun ShoppingListScreen(
                     TextButton(
                         onClick = {
                             val dietId = dietState.selectedDietId
-                            if (dietId.isNullOrEmpty()) return@TextButton
+                            if (dietId.isNullOrEmpty()) {
+                                Toast.makeText(context, "Please create a diet first", Toast.LENGTH_SHORT).show()
+                                return@TextButton
+                            }
                             isGenerating = true
                             val request = GenerateShoppingListRequest(uid, dietId)
                             RetrofitClient.instance.generateShoppingList(request).enqueue(object : Callback<List<ShoppingListItem>> {
@@ -221,7 +261,7 @@ fun ShoppingListScreen(
                                 scanner.startScan()
                                     .addOnSuccessListener { barcode ->
                                         barcode.rawValue?.let { code ->
-                                            pantryViewModel.handleScannedBarcode(code)
+                                            pantryViewModel.handleScannedBarcode(code, overridingName = item.name)
                                         }
                                     }
                                     .addOnFailureListener {
@@ -250,6 +290,30 @@ fun ShoppingListScreen(
             onFatChange = { pantryViewModel.onEditorFatChange(it) },
             onPackageWeightGramsChange = { pantryViewModel.onEditorPackageWeightGramsChange(it) },
             onSave = { pantryViewModel.saveEditor() }
+        )
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            containerColor = ShoppingListCardColor,
+            titleContentColor = Color.White,
+            textContentColor = Color.Gray,
+            title = { Text("Empty Shopping List?", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to empty the shopping list?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    syncList(emptyList(), replace = true)
+                    showClearDialog = false
+                }) {
+                    Text("YES", color = ShoppingListAccentColor, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("NO", color = Color.Gray)
+                }
+            }
         )
     }
 }
