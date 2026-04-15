@@ -1,40 +1,57 @@
 package it.sapienza.smartpantry.model
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
+import com.google.gson.annotations.SerializedName
+import it.sapienza.smartpantry.service.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 // --- DATA MODELS ---
 
 data class DailyMacroStats(
     val date: String,
-    val kcal: Int,
-    val proteins: Int,
-    val carbs: Int,
-    val fats: Int
+    val kcal: Float,
+    val proteins: Float,
+    val carbs: Float,
+    val fats: Float
 )
 
 data class WeeklyMacroStats(
+    @SerializedName("week", alternate = ["date", "label"])
     val week: String,
-    val kcal: Int,
-    val proteins: Int,
-    val carbs: Int,
-    val fats: Int
+    val kcal: Float,
+    val proteins: Float,
+    val carbs: Float,
+    val fats: Float
 )
 
 data class MonthlyMacroStats(
+    @SerializedName("week", alternate = ["month", "date", "label"])
     val week: String,
-    val kcal: Int,
-    val proteins: Int,
-    val carbs: Int,
-    val fats: Int
+    val kcal: Float,
+    val proteins: Float,
+    val carbs: Float,
+    val fats: Float
 )
 
-// --- API REQUEST/RESPONSE MODELS (Placeholder) ---
+// --- API REQUEST/RESPONSE MODELS ---
 
-data class StatsRequest(val uid: String, val startDate: String, val endDate: String)
-data class StatsResponse(val status: String, val stats: List<DailyMacroStats>)
+data class StatsRequest(
+    val uid: String,
+    val date: String
+)
+
+data class StatsResponse(
+    val status: String,
+    val weeklyStats: List<DailyMacroStats> = emptyList(),
+    val monthlyStats: List<WeeklyMacroStats> = emptyList(),
+    val yearlyStats: List<MonthlyMacroStats> = emptyList()
+)
 
 // --- VIEWMODEL STATE ---
 
@@ -52,49 +69,51 @@ class StatsViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(StatsUiState())
     val uiState: StateFlow<StatsUiState> = _uiState.asStateFlow()
 
-    fun loadStats(uid: String) {
-        // TODO: Implement API call to fetch stats
-        _uiState.value = _uiState.value.copy(isLoading = true)
+    fun loadStats(uid: String, date: String) {
+        if (uid.isBlank() || date.isBlank()) return
+
+        Log.d("StatsViewModel", "Loading stats for uid: $uid, date: $date")
+        _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         
-        // Mock data for Weekly
-        val mockWeeklyStats = listOf(
-            DailyMacroStats("Mon", 1800, 120, 200, 60),
-            DailyMacroStats("Tue", 2100, 130, 250, 70),
-            DailyMacroStats("Wed", 1950, 115, 220, 65),
-            DailyMacroStats("Thu", 2200, 140, 280, 75),
-            DailyMacroStats("Fri", 2000, 125, 230, 68),
-            DailyMacroStats("Sat", 2500, 150, 300, 90),
-            DailyMacroStats("Sun", 2300, 145, 270, 85)
-        )
+        val request = StatsRequest(uid, date)
+        RetrofitClient.instance.getStats(request).enqueue(object : Callback<StatsResponse> {
+            override fun onResponse(call: Call<StatsResponse>, response: Response<StatsResponse>) {
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    Log.d("StatsViewModel", "Response received: ${body?.status}")
 
-        // Mock data for Monthly (4 weeks)
-        val mockMonthlyStats = listOf(
-            WeeklyMacroStats("Week 1", 2100, 140, 200, 70),
-            WeeklyMacroStats("Week 2", 2300, 150, 230, 80),
-            WeeklyMacroStats("Week 3", 2200, 130, 240, 60),
-            WeeklyMacroStats("Week 4", 2350, 120, 235, 130)
-        )
+                    if (body != null && (body.status == "ok" || body.status == "success")) {
+                        _uiState.value = StatsUiState(
+                            weeklyStats = body.weeklyStats,
+                            monthlyStats = body.monthlyStats,
+                            yearlyStats = body.yearlyStats,
+                            isLoading = false
+                        )
+                    } else {
+                        val error = "Error: ${body?.status ?: "Unknown status"}"
+                        Log.e("StatsViewModel", error)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            errorMessage = error
+                        )
+                    }
+                } else {
+                    val error = "Server error: ${response.code()} ${response.message()}"
+                    Log.e("StatsViewModel", error)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        errorMessage = error
+                    )
+                }
+            }
 
-        val mockYearlyStats = listOf(
-            MonthlyMacroStats("Jan", 1950, 130, 210, 65),
-            MonthlyMacroStats("Feb", 2050, 135, 240, 70),
-            MonthlyMacroStats("Mar", 1900, 125, 215, 62),
-            MonthlyMacroStats("Apr", 2100, 140, 250, 75),
-            MonthlyMacroStats("May", 2000, 128, 230, 68),
-            MonthlyMacroStats("Jun", 2300, 145, 280, 85),
-            MonthlyMacroStats("Jul", 2450, 150, 300, 90),
-            MonthlyMacroStats("Aug", 2200, 138, 260, 78),
-            MonthlyMacroStats("Sep", 2100, 132, 245, 72),
-            MonthlyMacroStats("Oct", 2250, 142, 270, 80),
-            MonthlyMacroStats("Nov", 1950, 120, 220, 66),
-            MonthlyMacroStats("Dec", 2350, 148, 285, 88)
-        )
-
-        _uiState.value = StatsUiState(
-            weeklyStats = mockWeeklyStats,
-            monthlyStats = mockMonthlyStats,
-            yearlyStats = mockYearlyStats,
-            isLoading = false
-        )
+            override fun onFailure(call: Call<StatsResponse>, t: Throwable) {
+                Log.e("StatsViewModel", "Failed to load stats", t)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = t.message ?: "Network error"
+                )
+            }
+        })
     }
 }

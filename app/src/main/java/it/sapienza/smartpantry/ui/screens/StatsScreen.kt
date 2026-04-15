@@ -9,22 +9,27 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.StatsViewModel
 import it.sapienza.smartpantry.model.User
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 enum class ChartType {
     CALORIES, MACRONUTRIENTS
@@ -34,15 +39,16 @@ enum class TimeRange {
     WEEKLY, MONTHLY, YEARLY
 }
 
-// Common UI model to unify Daily and Weekly stats for charts
+// Common UI model to unify Daily, Weekly and Monthly stats
 data class StatPoint(
     val label: String,
-    val kcal: Int,
-    val proteins: Int,
-    val carbs: Int,
-    val fats: Int
+    val kcal: Float,
+    val proteins: Float,
+    val carbs: Float,
+    val fats: Float
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
     val uiState by statsViewModel.uiState.collectAsState()
@@ -51,21 +57,30 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
     var selectedChart by remember { mutableStateOf(ChartType.CALORIES) }
     var expandedChartMenu by remember { mutableStateOf(false) }
 
-    // Load stats when the screen is opened
-    LaunchedEffect(user.uid) {
+    var selectedDate by remember { mutableStateOf(startOfStatsDay(Calendar.getInstance())) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateKey = remember(selectedDate.timeInMillis) { formatStatsDateKey(selectedDate) }
+
+    LaunchedEffect(user.uid, dateKey) {
         if (user.uid.isNotBlank()) {
-            statsViewModel.loadStats(user.uid)
+            statsViewModel.loadStats(user.uid, dateKey)
         }
     }
 
-    // Map data based on selection
-    val currentStats = when (selectedPeriod) {
-        TimeRange.WEEKLY -> uiState.weeklyStats.map { StatPoint(it.date, it.kcal, it.proteins, it.carbs, it.fats) }
-        TimeRange.MONTHLY -> uiState.monthlyStats.map { StatPoint(it.week, it.kcal, it.proteins, it.carbs, it.fats) }
-        TimeRange.YEARLY -> uiState.yearlyStats.map { StatPoint(it.week, it.kcal, it.proteins, it.carbs, it.fats) }
+    val currentStats = remember(uiState, selectedPeriod) {
+        when (selectedPeriod) {
+            TimeRange.WEEKLY -> uiState.weeklyStats.map { 
+                StatPoint(formatChartLabel(it.date, TimeRange.WEEKLY), it.kcal, it.proteins, it.carbs, it.fats) 
+            }
+            TimeRange.MONTHLY -> uiState.monthlyStats.mapIndexed { index, it -> 
+                StatPoint("W${index + 1}", it.kcal, it.proteins, it.carbs, it.fats) 
+            }
+            TimeRange.YEARLY -> uiState.yearlyStats.map { 
+                StatPoint(formatChartLabel(it.week, TimeRange.YEARLY), it.kcal, it.proteins, it.carbs, it.fats) 
+            }
+        }
     }
 
-    // Reset selection when data changes
     LaunchedEffect(selectedPeriod) {
         selectedKcalIndex = null
     }
@@ -80,19 +95,30 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "STATISTICS",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF00E676),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${selectedPeriod.name} STATISTICS",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF00E676)
+            )
+            
+            IconButton(onClick = { showDatePicker = true }, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color(0xFF00E676))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Time Range Selector
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp)
+                .padding(bottom = 16.dp)
                 .background(Color(0xFF1A2421), RoundedCornerShape(12.dp))
                 .padding(4.dp)
         ) {
@@ -123,17 +149,26 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color(0xFF00E676))
             }
+        } else if (uiState.errorMessage != null) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(uiState.errorMessage!!, color = Color.Red, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = { statsViewModel.loadStats(user.uid, dateKey) }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text("Retry")
+                }
+            }
         } else {
-            // Summary Card
             StatsSummaryCard(currentStats, user, selectedPeriod)
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Chart Card
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(320.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
             ) {
@@ -147,13 +182,9 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
                                 if (selectedChart == ChartType.CALORIES) "CALORIES TIMELINE" else "MACRONUTRIENTS",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
+                                fontSize = 14.sp
                             )
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                contentDescription = "Select Chart",
-                                tint = Color.White
-                            )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.White)
                         }
                         DropdownMenu(
                             expanded = expandedChartMenu,
@@ -162,256 +193,122 @@ fun StatsScreen(user: User, statsViewModel: StatsViewModel = viewModel()) {
                         ) {
                             DropdownMenuItem(
                                 text = { Text("Calories Timeline", color = Color.White) },
-                                onClick = {
-                                    selectedChart = ChartType.CALORIES
-                                    expandedChartMenu = false
-                                }
+                                onClick = { selectedChart = ChartType.CALORIES; expandedChartMenu = false }
                             )
                             DropdownMenuItem(
                                 text = { Text("Macronutrients", color = Color.White) },
-                                onClick = {
-                                    selectedChart = ChartType.MACRONUTRIENTS
-                                    expandedChartMenu = false
-                                }
+                                onClick = { selectedChart = ChartType.MACRONUTRIENTS; expandedChartMenu = false }
                             )
                         }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                     
-                    AnimatedContent(
-                        targetState = selectedChart,
-                        transitionSpec = {
-                            fadeIn() togetherWith fadeOut()
-                        },
-                        label = "ChartTransition"
-                    ) { chart ->
-                        when (chart) {
-                            ChartType.CALORIES -> {
-                                val targetKcal = user.goals.dailyKcal
-
-                                KcalLineChart(
-                                    stats = currentStats,
-                                    targetKcal = targetKcal,
-                                    selectedIndex = selectedKcalIndex,
-                                    onSelectedIndexChange = { selectedKcalIndex = it }
-                                )
-                            }
-                            ChartType.MACRONUTRIENTS -> {
-                                MacrosBarChart(currentStats, user)
-                            }
+                    if (currentStats.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No data available", color = Color.Gray)
+                        }
+                    } else {
+                        when (selectedChart) {
+                            ChartType.CALORIES -> KcalLineChart(currentStats, user.goals.dailyKcal, selectedKcalIndex) { selectedKcalIndex = it }
+                            ChartType.MACRONUTRIENTS -> MacrosBarChart(currentStats, user)
                         }
                     }
                 }
             }
         }
     }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = statsLocalDateToUtcMillis(selectedDate))
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { selectedDate = statsUtcMillisToLocalDate(it) }
+                    showDatePicker = false
+                }) { Text("Select") }
+            }
+        ) { DatePicker(state = datePickerState) }
+    }
 }
 
 @Composable
-fun MacrosBarChart(stats: List<StatPoint>, user: User) {
-    if (stats.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No data available", color = Color.Gray)
-        }
-        return
-    }
+fun StatsSummaryCard(stats: List<StatPoint>, user: User, period: TimeRange) {
+    val avgKcal = if (stats.isNotEmpty()) stats.map { it.kcal }.average().toInt() else 0
+    val avgPro = if (stats.isNotEmpty()) stats.map { it.proteins }.average().toInt() else 0
+    val avgCarb = if (stats.isNotEmpty()) stats.map { it.carbs }.average().toInt() else 0
+    val avgFat = if (stats.isNotEmpty()) stats.map { it.fats }.average().toInt() else 0
 
-    val avgPro = stats.map { it.proteins }.average().toFloat()
-    val avgCarb = stats.map { it.carbs }.average().toFloat()
-    val avgFat = stats.map { it.fats }.average().toFloat()
-    
-    val targetProteins = (user.goals.macrosTarget["protein"] ?: 0).toFloat()
-    val targetCarbs = (user.goals.macrosTarget["carbs"] ?: 0).toFloat()
-    val targetFats = (user.goals.macrosTarget["fat"] ?: 0).toFloat()
+    val targetKcal = user.goals.dailyKcal
+    val targetPro = user.goals.macrosTarget["protein"] ?: 0
+    val targetCarb = user.goals.macrosTarget["carbs"] ?: 0
+    val targetFat = user.goals.macrosTarget["fat"] ?: 0
 
-    val macros = listOf(
-        Triple("Prot", avgPro, Color(0xFFFF5252)),
-        Triple("Carb", avgCarb, Color(0xFFFFD740)),
-        Triple("Fat", avgFat, Color(0xFF448AFF))
-    )
-    
-    val targets = listOf(targetProteins, targetCarbs, targetFats)
-    val maxVal = ((maxOf(macros.maxOf { it.second }, targets.maxOf { it }) / 50).toInt() + 1) * 50f
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = "${period.name} AVERAGE",
+                color = Color.Gray,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+            )
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Y-Axis Labels (Macro Names)
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(bottom = 24.dp, top = 8.dp, end = 8.dp),
-            verticalArrangement = Arrangement.SpaceAround,
-            horizontalAlignment = Alignment.End
-        ) {
-            macros.forEach { (label, _, _) ->
-                Text(
-                    text = label,
-                    color = Color.Gray.copy(alpha = 0.7f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(vertical = 8.dp)) {
+                Text(text = avgKcal.toString(), color = Color(0xFF00E676), fontWeight = FontWeight.ExtraBold, fontSize = 36.sp)
+                Text(text = " / $targetKcal kcal avg", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp, start = 8.dp))
             }
-        }
 
-        Column(modifier = Modifier.weight(1f)) {
-            Canvas(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(bottom = 4.dp, top = 8.dp)
-            ) {
-                val width = size.width
-                val height = size.height
-                val barHeight = 24.dp.toPx()
-                val spacing = height / macros.size
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // Vertical Grid Lines (X-Axis)
-                val steps = 4
-                for (i in 0..steps) {
-                    val x = (i.toFloat() / steps) * width
-                    drawLine(
-                        color = Color.Gray.copy(alpha = 0.1f),
-                        start = Offset(x, 0f),
-                        end = Offset(x, height),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-
-                // Horizontal Bars and Target Lines
-                macros.forEachIndexed { index, (_, value, color) ->
-                    val y = (index * spacing) + (spacing / 2) - (barHeight / 2)
-                    val barWidth = (value / maxVal) * width
-                    val targetX = (targets[index] / maxVal) * width
-                    
-                    // Background track
-                    drawRoundRect(
-                        color = color.copy(alpha = 0.1f),
-                        topLeft = Offset(0f, y),
-                        size = Size(width, barHeight),
-                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                    )
-                    
-                    // Actual bar
-                    drawRoundRect(
-                        color = color,
-                        topLeft = Offset(0f, y),
-                        size = Size(barWidth, barHeight),
-                        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                    )
-
-                    // Target line
-                    if (targets[index] > 0) {
-                        drawLine(
-                            color = Color.White.copy(alpha = 0.8f),
-                            start = Offset(targetX, y - 4.dp.toPx()),
-                            end = Offset(targetX, y + barHeight + 4.dp.toPx()),
-                            strokeWidth = 2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                        )
-                    }
-                }
-            }
-            
-            // X-Axis Labels (Grams)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                val steps = 4
-                for (i in 0..steps) {
-                    val labelValue = (maxVal * i / steps).toInt()
-                    Text(
-                        text = "${labelValue}g",
-                        color = Color.Gray.copy(alpha = 0.7f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                MacroSummaryItem("🥩", "PRO", avgPro, targetPro)
+                MacroSummaryItem("🍞", "Carb", avgCarb, targetCarb)
+                MacroSummaryItem("🥑", "Fat", avgFat, targetFat)
             }
         }
     }
 }
 
 @Composable
-fun KcalLineChart(
-    stats: List<StatPoint>,
-    targetKcal: Int,
-    selectedIndex: Int?,
-    onSelectedIndexChange: (Int?) -> Unit
-) {
-    if (stats.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No data available", color = Color.Gray)
-        }
-        return
-    }
-
-    val maxKcal = maxOf(stats.maxOfOrNull { it.kcal } ?: 0, targetKcal).coerceAtLeast(1)
-    val yMax = (maxKcal * 1.2f)
-
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Y-Axis Labels
-        Column(
-            modifier = Modifier
-                .fillMaxHeight()
-                .padding(bottom = 24.dp, top = 8.dp, end = 8.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
-            horizontalAlignment = Alignment.End
-        ) {
-            val steps = 4
-            for (i in steps downTo 0) {
-                val label = (yMax * i / steps).toInt()
-                Text(
-                    text = label.toString(),
-                    color = Color.Gray.copy(alpha = 0.7f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
+fun MacroSummaryItem(icon: String, label: String, value: Int, target: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text = icon, fontSize = 20.sp)
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(text = label, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(text = "${value}g", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(text = " / ${target}g", color = Color.DarkGray, fontSize = 10.sp, modifier = Modifier.padding(start = 4.dp))
             }
         }
+    }
+}
 
-        Box(modifier = Modifier.weight(1f)) {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 24.dp, top = 8.dp)
-                    .pointerInput(stats) {
-                        detectTapGestures(
-                            onTap = { offset ->
-                                val width = size.width.toFloat()
-                                val spacing = if (stats.size > 1) width / (stats.size - 1) else 0f
-                                
-                                var closestIndex = -1
-                                var minDistance = Float.MAX_VALUE
-                                
-                                stats.forEachIndexed { index, _ ->
-                                    val x = index * spacing
-                                    val distance = kotlin.math.abs(offset.x - x)
-                                    val threshold = if (spacing > 0) spacing / 2 else 50f
-                                    if (distance < minDistance && distance < threshold) {
-                                        minDistance = distance
-                                        closestIndex = index
-                                    }
-                                }
-                                val newIndex = if (closestIndex != -1 && selectedIndex != closestIndex) closestIndex else null
-                                onSelectedIndexChange(newIndex)
-                            }
-                        )
-                    }
-            ) {
+@Composable
+fun KcalLineChart(stats: List<StatPoint>, targetKcal: Int, selectedIndex: Int?, onSelectedIndexChange: (Int?) -> Unit) {
+    val maxKcal = (maxOf(stats.maxOf { it.kcal }, targetKcal.toFloat()) * 1.3f).coerceAtLeast(1f)
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column {
+            Canvas(modifier = Modifier.weight(1f).fillMaxWidth().pointerInput(stats) {
+                detectTapGestures { offset ->
+                    val stepX = size.width / (stats.size - 1).coerceAtLeast(1)
+                    onSelectedIndexChange((offset.x / stepX + 0.5f).toInt().coerceIn(0, stats.size - 1))
+                }
+            }) {
                 val width = size.width
                 val height = size.height
-                val spacing = if (stats.size > 1) width / (stats.size - 1) else 0f
+                val stepX = width / (stats.size - 1).coerceAtLeast(1)
 
-                val points = stats.mapIndexed { index, stat ->
-                    val x = index * spacing
-                    val y = height - (stat.kcal.toFloat() / yMax) * height
-                    Offset(x, y)
-                }
-
-                // Grid Lines
-                for (i in 0..4) {
-                    val y = height - (i.toFloat() / 4) * height
+                // Grid lines
+                val gridSteps = 4
+                for (i in 0..gridSteps) {
+                    val y = height - (i.toFloat() / gridSteps) * height
                     drawLine(
                         color = Color.Gray.copy(alpha = 0.1f),
                         start = Offset(0f, y),
@@ -420,110 +317,59 @@ fun KcalLineChart(
                     )
                 }
 
-                // Target Kcal Line
-                if (targetKcal > 0) {
-                    val targetY = height - (targetKcal.toFloat() / yMax) * height
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.5f),
-                        start = Offset(0f, targetY),
-                        end = Offset(width, targetY),
-                        strokeWidth = 2.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                    )
-                }
-
-                // Line Path
-                val path = Path().apply {
-                    if (points.isNotEmpty()) {
-                        moveTo(points.first().x, points.first().y)
-                        for (i in 1 until points.size) {
-                            lineTo(points[i].x, points[i].y)
-                        }
-                    }
-                }
-
-                // Gradient Fill
-                if (points.isNotEmpty()) {
-                    val fillPath = Path().apply {
-                        addPath(path)
-                        lineTo(points.last().x, height)
-                        lineTo(points.first().x, height)
-                        close()
-                    }
-                    drawPath(
-                        path = fillPath,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFF00E676).copy(alpha = 0.2f), Color.Transparent)
-                        )
-                    )
-                }
-
-                // Main Line
-                drawPath(
-                    path = path,
-                    color = Color(0xFF00E676),
-                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                // Target Line
+                val targetY = height - (targetKcal / maxKcal) * height
+                drawLine(
+                    color = Color.White.copy(alpha = 0.2f),
+                    start = Offset(0f, targetY),
+                    end = Offset(width, targetY),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
                 )
 
-                // Selection Highlight Line
-                selectedIndex?.let { index ->
-                    if (index < points.size) {
-                        val x = points[index].x
-                        drawLine(
-                            color = Color(0xFF00E676).copy(alpha = 0.3f),
-                            start = Offset(x, 0f),
-                            end = Offset(x, height),
-                            strokeWidth = 2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                        )
-                    }
+                val points = stats.mapIndexed { i, s -> Offset(i * stepX, height - (s.kcal / maxKcal) * height) }
+                
+                // Area
+                val areaPath = Path().apply {
+                    moveTo(0f, height)
+                    points.forEach { lineTo(it.x, it.y) }
+                    lineTo(width, height); close()
                 }
+                drawPath(areaPath, Brush.verticalGradient(listOf(Color(0xFF00E676).copy(alpha = 0.2f), Color.Transparent)))
+
+                // Line
+                val linePath = Path().apply { points.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) } }
+                drawPath(
+                    path = linePath,
+                    color = Color(0xFF00E676),
+                    style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
 
                 // Points
-                points.forEachIndexed { index, point ->
-                    val isSelected = selectedIndex == index
-                    drawCircle(
-                        color = if (isSelected) Color.White else Color(0xFF00E676),
-                        radius = (if (isSelected) 6.dp else 4.dp).toPx(),
-                        center = point
-                    )
-                    drawCircle(
-                        color = Color(0xFF1A2421),
-                        radius = (if (isSelected) 3.dp else 2.dp).toPx(),
-                        center = point
-                    )
+                points.forEachIndexed { i, p ->
+                    drawCircle(Color(0xFF00E676), 4.dp.toPx(), p)
+                    if (i == selectedIndex) drawCircle(Color.White, 6.dp.toPx(), p, style = Stroke(2.dp.toPx()))
                 }
             }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // X-Axis labels
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                stats.forEach { 
+                    Text(it.label, color = Color.Gray, fontSize = 10.sp, textAlign = TextAlign.Center) 
+                }
+            }
+        }
 
-            // X-Axis Labels
-            Row(
+        // Tooltip with bounds check
+        if (selectedIndex != null && selectedIndex < stats.size) {
+            ChartTooltip(
+                stat = stats[selectedIndex],
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                stats.forEachIndexed { index, stat ->
-                    Text(
-                        text = stat.label,
-                        color = if (selectedIndex == index) Color.White else Color.Gray,
-                        fontSize = 10.sp,
-                        fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal
-                    )
-                }
-            }
-
-            // Tooltip Overlay
-            selectedIndex?.let { index ->
-                if (index < stats.size) {
-                    val stat = stats[index]
-                    ChartTooltip(
-                        stat = stat,
-                        modifier = Modifier
-                            .align(if (index > stats.size / 2) Alignment.TopStart else Alignment.TopEnd)
-                            .padding(8.dp)
-                    )
-                }
-            }
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+            )
         }
     }
 }
@@ -532,122 +378,102 @@ fun KcalLineChart(
 fun ChartTooltip(stat: StatPoint, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = Color(0xFF2A3431),
-        tonalElevation = 8.dp,
-        shadowElevation = 4.dp
+        shadowElevation = 8.dp
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = stat.label.uppercase(),
-                color = Color.Gray,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "${stat.kcal} kcal",
-                color = Color(0xFF00E676),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold
-            )
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 4.dp),
-                thickness = DividerDefaults.Thickness,
-                color = Color.White.copy(alpha = 0.1f)
-            )
-            TooltipMacroRow("Pro", "${stat.proteins}g")
-            TooltipMacroRow("Carb", "${stat.carbs}g")
-            TooltipMacroRow("Fat", "${stat.fats}g")
-        }
-    }
-}
-
-@Composable
-fun TooltipMacroRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(0.3f),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = Color.Gray, fontSize = 11.sp)
-        Text(value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-fun StatsSummaryCard(stats: List<StatPoint>, user: User, period: TimeRange) {
-    // All views now show daily average of the data points
-    val avgKcal = if (stats.isNotEmpty()) stats.map { it.kcal }.average().toInt() else 0
-    val avgPro = if (stats.isNotEmpty()) stats.map { it.proteins }.average().toInt() else 0
-    val avgCarb = if (stats.isNotEmpty()) stats.map { it.carbs }.average().toInt() else 0
-    val avgFat = if (stats.isNotEmpty()) stats.map { it.fats }.average().toInt() else 0
-
-    // Targets are always the daily ones from the user goals
-    val targetKcal = user.goals.dailyKcal
-    val label = when (period) {
-        TimeRange.WEEKLY -> "WEEKLY AVERAGE"
-        TimeRange.MONTHLY -> "MONTHLY AVERAGE"
-        TimeRange.YEARLY -> "YEARLY AVERAGE"
-    }
-    val unitLabel = "kcal/day avg"
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2421))
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = "$avgKcal",
-                    color = Color(0xFF00E676),
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 32.sp
-                )
-                Text(
-                    text = " / $targetKcal $unitLabel",
-                    color = Color.Gray,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Macro averages
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                val targetPro = user.goals.macrosTarget["protein"] ?: 0
-                val targetCarb = user.goals.macrosTarget["carbs"] ?: 0
-                val targetFat = user.goals.macrosTarget["fat"] ?: 0
-                
-                MacroStatSmall("PRO", "${avgPro}g", "${targetPro}g", "🥩")
-                MacroStatSmall("Carb", "${avgCarb}g", "${targetCarb}g", "🍞")
-                MacroStatSmall("Fat", "${avgFat}g", "${targetFat}g", "🥑")
+        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = stat.label, color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(text = "${stat.kcal.toInt()} kcal", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 4.dp)) {
+                TooltipMacroInfo("P", stat.proteins, Color(0xFFFF5252))
+                TooltipMacroInfo("C", stat.carbs, Color(0xFFFFD740))
+                TooltipMacroInfo("F", stat.fats, Color(0xFF448AFF))
             }
         }
     }
 }
 
 @Composable
-fun MacroStatSmall(label: String, value: String, target: String, emoji: String) {
+fun TooltipMacroInfo(label: String, value: Float, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = Color(0xFF2A3431),
-            modifier = Modifier.size(32.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(emoji, fontSize = 16.sp)
+        Box(modifier = Modifier.size(6.dp).background(color, RoundedCornerShape(2.dp)))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text = "$label: ${value.toInt()}g", color = Color.Gray, fontSize = 10.sp)
+    }
+}
+
+@Composable
+fun MacrosBarChart(stats: List<StatPoint>, user: User) {
+    val avgPro = stats.map { it.proteins }.average().toFloat()
+    val avgCarb = stats.map { it.carbs }.average().toFloat()
+    val avgFat = stats.map { it.fats }.average().toFloat()
+    
+    val targetPro = (user.goals.macrosTarget["protein"] ?: 1).toFloat()
+    val targetCarb = (user.goals.macrosTarget["carbs"] ?: 1).toFloat()
+    val targetFat = (user.goals.macrosTarget["fat"] ?: 1).toFloat()
+
+    val macros = listOf(
+        Triple("Prot", avgPro, Color(0xFFFF5252)),
+        Triple("Carb", avgCarb, Color(0xFFFFD740)),
+        Triple("Fat", avgFat, Color(0xFF448AFF))
+    )
+    
+    val targets = listOf(targetPro, targetCarb, targetFat)
+    val maxVal = (maxOf(macros.maxOf { it.second }, targets.maxOf { it }, 100f) / 50).toInt() * 50f + 50f
+
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        macros.forEachIndexed { index, (label, value, color) ->
+            val target = targets[index]
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(text = label, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "${value.toInt()}g / ${target.toInt()}g", color = Color.White, fontSize = 10.sp)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(16.dp).background(color.copy(alpha = 0.1f), RoundedCornerShape(8.dp))) {
+                    Box(modifier = Modifier.fillMaxWidth( (value / maxVal).coerceIn(0f, 1f) ).fillMaxHeight().background(color, RoundedCornerShape(8.dp)))
+                    
+                    // Target Line Indicator
+                    Box(modifier = Modifier.fillMaxWidth( (target / maxVal).coerceIn(0f, 1f) ).fillMaxHeight()) {
+                        Box(modifier = Modifier.align(Alignment.CenterEnd).width(2.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.7f)))
+                    }
+                }
             }
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Column {
-            Text(label, fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(" / $target", color = Color.Gray, fontSize = 10.sp, modifier = Modifier.padding(bottom = 1.dp, start = 2.dp))
+        
+        // X-Axis Scale
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            for (i in 0..4) {
+                Text(text = "${(maxVal * i / 4).toInt()}g", color = Color.DarkGray, fontSize = 10.sp)
             }
         }
     }
 }
+
+private fun formatChartLabel(label: String, period: TimeRange): String {
+    return when (period) {
+        TimeRange.WEEKLY -> {
+            try {
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(label)
+                SimpleDateFormat("EEE", Locale.ENGLISH).format(date!!).uppercase()
+            } catch (e: Exception) {
+                label.take(3).uppercase()
+            }
+        }
+        TimeRange.YEARLY -> {
+            try {
+                val date = SimpleDateFormat("yyyy-MM", Locale.US).parse(label)
+                SimpleDateFormat("MMM", Locale.ENGLISH).format(date!!).uppercase()
+            } catch (e: Exception) {
+                label.take(3).uppercase()
+            }
+        }
+        else -> label
+    }
+}
+
+private fun startOfStatsDay(calendar: Calendar): Calendar = (calendar.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
+private fun formatStatsDateKey(selectedDate: Calendar): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(selectedDate.time)
+private fun statsLocalDateToUtcMillis(localDate: Calendar): Long = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { clear(); set(localDate.get(Calendar.YEAR), localDate.get(Calendar.MONTH), localDate.get(Calendar.DAY_OF_MONTH)) }.timeInMillis
+private fun statsUtcMillisToLocalDate(utcMillis: Long): Calendar { val utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }; return Calendar.getInstance().apply { clear(); set(utcCalendar.get(Calendar.YEAR), utcCalendar.get(Calendar.MONTH), utcCalendar.get(Calendar.DAY_OF_MONTH)) } }

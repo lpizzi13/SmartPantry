@@ -56,6 +56,9 @@ interface SmartPantryApi {
         @Path("uid") uid: String,
         @Path("dateKey") dateKey: String
     ): Call<HomeDayResponse>
+
+    @POST("get-stats")
+    fun getStats(@Body request: StatsRequest): Call<StatsResponse>
 }
 
 data class PantryAddRequest(
