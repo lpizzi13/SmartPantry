@@ -1,6 +1,7 @@
 package it.sapienza.smartpantry.ui.screens
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,7 +30,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.HomeEntry
 import it.sapienza.smartpantry.model.HomeViewModel
 import it.sapienza.smartpantry.model.User
-import it.sapienza.smartpantry.ui.SearchFoodActivity
+import it.sapienza.smartpantry.ui.DailyActivity
+import kotlinx.coroutines.flow.collectLatest
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -67,6 +69,11 @@ fun HomeScreen(user: User, homeViewModel: HomeViewModel = viewModel()) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    LaunchedEffect(Unit) {
+        homeViewModel.events.collectLatest { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val consumedKcal = homeState.totals.kcal
     val consumedProteins = homeState.totals.protein
@@ -98,14 +105,6 @@ fun HomeScreen(user: User, homeViewModel: HomeViewModel = viewModel()) {
             )
             Spacer(modifier = Modifier.height(10.dp))
         }
-        homeState.errorMessage?.let {
-            Text(
-                text = it,
-                color = Color(0xFFFF8A80),
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-        }
         NutritionCard(
             user = user,
             currentKcal = consumedKcal,
@@ -124,11 +123,10 @@ fun HomeScreen(user: User, homeViewModel: HomeViewModel = viewModel()) {
                 icon = mealType.icon,
                 onAddClick = {
                     if (user.uid.isBlank()) return@MealItem
-                    val intent = Intent(context, SearchFoodActivity::class.java).apply {
-                        putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
-                        putExtra(SearchFoodActivity.EXTRA_SOURCE, SearchFoodActivity.SOURCE_HOME)
-                        putExtra(SearchFoodActivity.EXTRA_HOME_DATE_KEY, dateKey)
-                        putExtra(SearchFoodActivity.EXTRA_HOME_MEAL_TYPE, mealType.apiValue)
+                    val intent = Intent(context, DailyActivity::class.java).apply {
+                        putExtra(DailyActivity.EXTRA_UID, user.uid)
+                        putExtra(DailyActivity.EXTRA_HOME_DATE_KEY, dateKey)
+                        putExtra(DailyActivity.EXTRA_HOME_MEAL_TYPE, mealType.apiValue)
                     }
                     context.startActivity(intent)
                 },

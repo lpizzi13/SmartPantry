@@ -67,6 +67,7 @@ import it.sapienza.smartpantry.service.PantryAddNutrients
 import it.sapienza.smartpantry.service.PantryAddRequest
 import it.sapienza.smartpantry.service.PantryGramsRequest
 import it.sapienza.smartpantry.service.RetrofitClient
+import java.util.Base64
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -750,13 +751,19 @@ class PantryViewModel : ViewModel() {
         if (!grams.isFinite() || grams <= 0.0) {
             return@withContext Result.failure(IllegalArgumentException("Grams must be greater than 0."))
         }
+        val uniqueHomeEntryId = buildHomeEntryId(
+            originalOpenFoodFactsId = openFoodFactsId,
+            productName = productName,
+            dateKey = dateKey,
+            mealType = mealType
+        )
 
         try {
             val response = api.addHomeEntry(
                 HomeAddRequest(
                     uid = uid,
                     dateKey = dateKey,
-                    openFoodFactsId = openFoodFactsId?.takeIf { it.isNotBlank() },
+                    openFoodFactsId = uniqueHomeEntryId,
                     mealType = mealType,
                     source = source,
                     productName = productName.trim().ifBlank { "Unnamed product" },
@@ -855,14 +862,51 @@ class PantryViewModel : ViewModel() {
             val json = JSONObject(raw)
             val errorText = json.optString("error")
             val messageText = json.optString("message")
-            when {
+            val resolved = when {
                 errorText.isNotBlank() -> errorText
                 messageText.isNotBlank() -> messageText
                 else -> fallback
             }
+            toEnglishBackendMessage(resolved)
         } catch (_: Exception) {
             fallback
         }
+    }
+
+    private fun toEnglishBackendMessage(value: String): String {
+        var message = value.trim()
+        if (message.isBlank()) return "Unexpected backend error."
+
+        message = message.replace(
+            Regex("(?i)packageweightgrams\\s+deve\\s+essere\\s*>\\s*0"),
+            "packageWeightGrams must be greater than 0."
+        )
+        message = message.replace(
+            Regex("(?i)deve\\s+essere\\s*>\\s*0"),
+            "must be greater than 0"
+        )
+        message = message.replace(
+            Regex("(?i)deve\\s+essere\\s*>=\\s*0"),
+            "must be greater than or equal to 0"
+        )
+        message = message.replace(
+            Regex("(?i)deve\\s+essere\\s+maggiore\\s+di\\s+0"),
+            "must be greater than 0"
+        )
+        message = message.replace(
+            Regex("(?i)deve\\s+essere\\s+maggiore\\s+o\\s+uguale\\s+a\\s+0"),
+            "must be greater than or equal to 0"
+        )
+        message = message.replace(
+            Regex("(?i)deve\\s+essere"),
+            "must be"
+        )
+        message = message.replace(
+            Regex("(?i)non\\s+trovat[oa]"),
+            "not found"
+        )
+
+        return message
     }
 
     private fun normalizeAddPayload(
@@ -896,6 +940,30 @@ class PantryViewModel : ViewModel() {
 
     private fun sanitizeMacro(value: Double): Double {
         return if (value.isFinite() && value >= 0.0) value else 0.0
+    }
+
+    private fun buildHomeEntryId(
+        originalOpenFoodFactsId: String?,
+        productName: String,
+        dateKey: String,
+        mealType: String
+    ): String {
+        val timestamp = System.currentTimeMillis()
+        val encodedValue = encodeForEntryId(
+            originalOpenFoodFactsId?.takeIf { it.isNotBlank() }
+                ?: productName.trim().ifBlank { "manual" }
+        )
+        return if (!originalOpenFoodFactsId.isNullOrBlank()) {
+            "he_off::$encodedValue::$timestamp"
+        } else {
+            "he_name::$encodedValue::$timestamp"
+        }
+    }
+
+    private fun encodeForEntryId(value: String): String {
+        return Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(value.toByteArray(Charsets.UTF_8))
     }
 
     private fun Long.toIntOrNullChecked(allowZero: Boolean = false): Int? {

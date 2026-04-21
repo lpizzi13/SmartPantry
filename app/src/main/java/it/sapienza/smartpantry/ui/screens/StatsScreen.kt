@@ -267,8 +267,8 @@ fun StatsSummaryCard(stats: List<StatPoint>, user: User, period: TimeRange) {
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 MacroSummaryItem("🥩", "PRO", avgPro, targetPro)
-                MacroSummaryItem("🍞", "Carb", avgCarb, targetCarb)
-                MacroSummaryItem("🥑", "Fat", avgFat, targetFat)
+                MacroSummaryItem("🍞", "CARB", avgCarb, targetCarb)
+                MacroSummaryItem("🥑", "FAT", avgFat, targetFat)
             }
         }
     }
