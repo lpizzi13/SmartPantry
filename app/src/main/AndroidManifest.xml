@@ -39,6 +39,9 @@
             android:exported="false">
         </activity>
         <activity
+            android:name=".ui.DailyActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.SearchFoodActivity"
             android:exported="false" />
     </application>

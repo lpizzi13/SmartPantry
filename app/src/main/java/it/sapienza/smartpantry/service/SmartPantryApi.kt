@@ -55,6 +55,24 @@ interface SmartPantryApi {
 
     @POST("update_shopping_list")
     fun updateShoppingList(@Body request: UpdateShoppingListRequest): Call<UpdateShoppingListResponse>
+
+    @POST("home/add")
+    fun addHomeEntry(@Body request: HomeAddRequest): Call<HomeMutationResponse>
+
+    @PATCH("home/update")
+    fun updateHomeEntry(@Body request: HomeUpdateRequest): Call<HomeMutationResponse>
+
+    @HTTP(method = "DELETE", path = "home/delete", hasBody = true)
+    fun deleteHomeEntry(@Body request: HomeDeleteRequest): Call<HomeMutationResponse>
+
+    @GET("home/{uid}/{dateKey}")
+    fun getHomeDay(
+        @Path("uid") uid: String,
+        @Path("dateKey") dateKey: String
+    ): Call<HomeDayResponse>
+
+    @POST("get-stats")
+    fun getStats(@Body request: StatsRequest): Call<StatsResponse>
 }
 
 data class GetShoppingListRequest(val uid: String)
@@ -112,3 +130,70 @@ data class PantryDeleteRequest(
     val openFoodFactsId: String? = null,
     val productName: String? = null
 )
+
+data class HomeAddRequest(
+    val uid: String,
+    val dateKey: String,
+    val openFoodFactsId: String? = null,
+    val mealType: String,
+    val source: String,
+    val productName: String,
+    val grams: Double,
+    val nutrients: HomeAddNutrients
+) {
+    init {
+        require(dateKey.isNotBlank()) { "dateKey is required." }
+        require(mealType in setOf("breakfast", "lunch", "dinner", "snacks")) {
+            "mealType must be breakfast, lunch, dinner or snacks."
+        }
+        require(source in setOf("openfoodfacts", "manual")) {
+            "source must be openfoodfacts or manual."
+        }
+        require(grams.isFinite() && grams > 0.0) { "grams must be > 0." }
+        require(productName.isNotBlank()) { "productName is required." }
+    }
+}
+
+data class HomeAddNutrients(
+    val kcal: Double = 0.0,
+    val carbs: Double = 0.0,
+    val protein: Double = 0.0,
+    val fat: Double = 0.0
+)
+
+data class HomeUpdateRequest(
+    val uid: String,
+    val dateKey: String,
+    val openFoodFactsId: String,
+    val mealType: String,
+    val source: String,
+    val productName: String,
+    val grams: Double,
+    val nutrients: HomeAddNutrients
+) {
+    init {
+        require(uid.isNotBlank()) { "uid is required." }
+        require(dateKey.isNotBlank()) { "dateKey is required." }
+        require(openFoodFactsId.isNotBlank()) { "openFoodFactsId is required." }
+        require(mealType in setOf("breakfast", "lunch", "dinner", "snacks")) {
+            "mealType must be breakfast, lunch, dinner or snacks."
+        }
+        require(source in setOf("openfoodfacts", "manual")) {
+            "source must be openfoodfacts or manual."
+        }
+        require(productName.isNotBlank()) { "productName is required." }
+        require(grams.isFinite() && grams > 0.0) { "grams must be > 0." }
+    }
+}
+
+data class HomeDeleteRequest(
+    val uid: String,
+    val dateKey: String,
+    val openFoodFactsId: String
+) {
+    init {
+        require(uid.isNotBlank()) { "uid is required." }
+        require(dateKey.isNotBlank()) { "dateKey is required." }
+        require(openFoodFactsId.isNotBlank()) { "openFoodFactsId is required." }
+    }
+}

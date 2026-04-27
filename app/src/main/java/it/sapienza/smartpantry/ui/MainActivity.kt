@@ -32,14 +32,16 @@ import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.model.DietViewModel
+import it.sapienza.smartpantry.ui.screens.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
 import it.sapienza.smartpantry.ui.screens.ProfileScreen
 import it.sapienza.smartpantry.ui.screens.ShoppingListScreen
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,7 +104,6 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
     val currentDestination = navBackStackEntry?.destination
 
     var user by remember { mutableStateOf(initialUser) }
-    val today = SimpleDateFormat("EEEE, MMMM d", Locale.ENGLISH).format(Date())
     val context = LocalContext.current
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
@@ -114,7 +115,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
         containerColor = darkBackground,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = today, color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text(text = "Smart Pantry", color = Color.White, fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = darkBackground,
                     titleContentColor = Color.White,
@@ -231,12 +232,13 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                     onOpenSearchFood = {
                         val intent = Intent(context, SearchFoodActivity::class.java)
                         intent.putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
+                        intent.putExtra(SearchFoodActivity.EXTRA_SOURCE, SearchFoodActivity.SOURCE_PANTRY)
                         context.startActivity(intent)
                     }
                 ) }
                 composable(Screen.ShopList.route) { ShoppingListScreen(uid = user.uid, dietViewModel = dietViewModel) }
                 composable(Screen.Diet.route) { DietScreen(uid = user.uid, dietViewModel = dietViewModel) }
-                composable(Screen.Stats.route) { PlaceholderScreen(stringResource(id = R.string.text_stats_screen)) }
+                composable(Screen.Stats.route) { StatsScreen(user = user) }
                 composable(Screen.Profile.route) {
                     ProfileScreen(
                         user = user,

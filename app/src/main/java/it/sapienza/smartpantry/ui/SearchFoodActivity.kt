@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +41,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -85,10 +85,16 @@ class SearchFoodActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val uid = intent.getStringExtra(EXTRA_UID).orEmpty()
+        val source = intent.getStringExtra(EXTRA_SOURCE).orEmpty()
+        val homeDateKey = intent.getStringExtra(EXTRA_HOME_DATE_KEY).orEmpty()
+        val homeMealType = intent.getStringExtra(EXTRA_HOME_MEAL_TYPE).orEmpty()
         setContent {
             MaterialTheme {
                 SearchFoodActivityContent(
                     uid = uid,
+                    source = source,
+                    homeDateKey = homeDateKey,
+                    homeMealType = homeMealType,
                     onClose = { finish() }
                 )
             }
@@ -97,6 +103,12 @@ class SearchFoodActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_UID = "search_food_uid"
+        const val EXTRA_SOURCE = "search_food_source"
+        const val EXTRA_HOME_DATE_KEY = "search_food_home_date_key"
+        const val EXTRA_HOME_MEAL_TYPE = "search_food_home_meal_type"
+
+        const val SOURCE_PANTRY = "pantry"
+        const val SOURCE_HOME = "home"
     }
 }
 
@@ -104,6 +116,9 @@ class SearchFoodActivity : ComponentActivity() {
 @Composable
 private fun SearchFoodActivityContent(
     uid: String,
+    source: String,
+    homeDateKey: String,
+    homeMealType: String,
     onClose: () -> Unit,
     pantryViewModel: PantryViewModel = viewModel()
 ) {
@@ -111,12 +126,29 @@ private fun SearchFoodActivityContent(
     val activity = context as? Activity
     val uiState by pantryViewModel.uiState.collectAsState()
 
-    LaunchedEffect(uid) {
-        if (uid.isNotBlank()) pantryViewModel.bindToUser(uid)
+    val isHomeMode = remember(source, homeDateKey, homeMealType) {
+        source.equals(SearchFoodActivity.SOURCE_HOME, ignoreCase = true) &&
+            homeDateKey.isNotBlank() &&
+            homeMealType.lowercase() in setOf("breakfast", "lunch", "dinner", "snacks")
+    }
+    val normalizedMode = if (isHomeMode) PantryViewModel.SEARCH_MODE_HOME else PantryViewModel.SEARCH_MODE_PANTRY
+
+    LaunchedEffect(uid, normalizedMode, homeDateKey, homeMealType) {
+        pantryViewModel.configureSearchSession(
+            mode = normalizedMode,
+            homeDateKey = homeDateKey.takeIf { it.isNotBlank() },
+            homeMealType = homeMealType.takeIf { it.isNotBlank() }
+        )
+        if (uid.isNotBlank()) pantryViewModel.bindToUser(uid, refreshPantry = !isHomeMode)
     }
     LaunchedEffect(Unit) {
         pantryViewModel.events.collectLatest { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+    LaunchedEffect(isHomeMode) {
+        if (isHomeMode) {
+            pantryViewModel.saveCompleted.collectLatest { onClose() }
         }
     }
 
@@ -139,13 +171,20 @@ private fun SearchFoodActivityContent(
             .build()
     }
     val scanner = remember(activity) { activity?.let { GmsBarcodeScanning.getClient(it, scannerOptions) } }
-    val pantryById = remember(uiState.pantryItems) { uiState.pantryItems.associateBy { it.openFoodFactsId } }
+    val pantryById = remember(uiState.pantryItems, isHomeMode) {
+        if (isHomeMode) emptyMap<String, PantryItem>() else uiState.pantryItems.associateBy { it.openFoodFactsId }
+    }
 
     Scaffold(
         containerColor = SearchBackgroundColor,
         topBar = {
             TopAppBar(
-                title = { Text("Search food") },
+                title = {
+                    Text(
+                        if (isHomeMode) "Add to ${mealTypeLabel(homeMealType)}"
+                        else "Search Food"
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = SearchBackgroundColor,
                     titleContentColor = SearchTextPrimary,
@@ -165,7 +204,10 @@ private fun SearchFoodActivityContent(
                 .padding(innerPadding)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
                     value = uiState.searchQuery,
                     onValueChange = pantryViewModel::onSearchQueryChange,
@@ -222,6 +264,7 @@ private fun SearchFoodActivityContent(
                     .weight(1f, fill = true),
                 state = uiState,
                 pantryById = pantryById,
+                showPantryQuantity = !isHomeMode,
                 onSelectProduct = pantryViewModel::openEditorFromSearchResult
             )
             Spacer(modifier = Modifier.height(10.dp))
@@ -241,6 +284,7 @@ private fun SearchFoodActivityContent(
             onProtChange = pantryViewModel::onEditorProtChange,
             onFatChange = pantryViewModel::onEditorFatChange,
             onPackageWeightGramsChange = pantryViewModel::onEditorPackageWeightGramsChange,
+            isHomeMode = isHomeMode,
             onSave = pantryViewModel::saveEditor
         )
     }
@@ -276,123 +320,128 @@ private fun SearchResultsSection(
     modifier: Modifier = Modifier,
     state: PantryUiState,
     pantryById: Map<String, PantryItem>,
+    showPantryQuantity: Boolean,
     onSelectProduct: (OpenFoodFactsProduct) -> Unit
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = SearchCardColor)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(
-                "SEARCH RESULT",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = SearchAccentColor
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            HorizontalDivider(color = SearchBorderColor)
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = true)
-            ) {
-                when {
-                    state.isSearching -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = SearchAccentColor)
-                        }
-                    }
-                    state.searchResults.isEmpty() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "No search result",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SearchTextSecondary
-                            )
-                        }
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(
-                                state.searchResults,
-                                key = { it.resolvedOpenFoodFactsId() ?: it.hashCode().toString() }
-                            ) { product ->
-                                val uiModel = product.toSearchFood(pantryById)
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onSelectProduct(product) },
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = SearchItemColor)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = if (uiModel.isCertified) "${uiModel.productName} " else uiModel.productName,
-                                                    modifier = Modifier.weight(1f, fill = false),
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = SearchTextPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                if (uiModel.isCertified) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Verified,
-                                                        contentDescription = "Certified",
-                                                        tint = SearchAccentColor,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                            }
-                                            Text(
-                                                uiModel.brandName,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = SearchTextSecondary
-                                            )
-                                            uiModel.alreadyInPantryQuantity?.let {
-                                                Text(
-                                                    "Already in pantry: $it",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = SearchAccentColor
-                                                )
-                                            }
-                                        }
-                                        Icon(
-                                            Icons.Default.Add,
-                                            contentDescription = "Add",
-                                            tint = SearchAccentColor
-                                        )
-                                    }
-                                }
-                            }
-                        }
+    Box(modifier = modifier.fillMaxWidth()) {
+        when {
+            state.isSearching -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = SearchAccentColor)
+                }
+            }
+            state.searchResults.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No search result",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = SearchTextSecondary
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(
+                        state.searchResults,
+                        key = { it.resolvedOpenFoodFactsId() ?: it.hashCode().toString() }
+                    ) { product ->
+                        val uiModel = product.toSearchFood(pantryById)
+                        SearchResultItemCard(
+                            productName = uiModel.productName,
+                            brandName = uiModel.brandName,
+                            isCertified = uiModel.isCertified,
+                            alreadyInPantryQuantity = uiModel.alreadyInPantryQuantity,
+                            showPantryQuantity = showPantryQuantity,
+                            onClick = { onSelectProduct(product) }
+                        )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultItemCard(
+    productName: String,
+    brandName: String,
+    isCertified: Boolean,
+    alreadyInPantryQuantity: Long?,
+    showPantryQuantity: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SearchCardColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isCertified) {
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = "Certified",
+                            tint = SearchAccentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text(
+                        text = productName,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = SearchTextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = brandName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SearchTextSecondary
+                )
+                if (showPantryQuantity && alreadyInPantryQuantity != null) {
+                    Text(
+                        text = "In pantry: $alreadyInPantryQuantity",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SearchAccentColor
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onClick,
+                modifier = Modifier
+                    .background(SearchBackgroundColor, RoundedCornerShape(10.dp))
+                    .size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add",
+                    tint = SearchAccentColor,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }
@@ -410,6 +459,7 @@ private fun FoodEditorDialog(
     onProtChange: (String) -> Unit,
     onFatChange: (String) -> Unit,
     onPackageWeightGramsChange: (String) -> Unit,
+    isHomeMode: Boolean,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -475,23 +525,27 @@ private fun FoodEditorDialog(
                 OutlinedTextField(
                     value = state.editorQuantityInput,
                     onValueChange = onQuantityChange,
-                    label = { Text("Quantity") },
+                    label = { Text(if (isHomeMode) "Grams" else "Quantity") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (isHomeMode) KeyboardType.Decimal else KeyboardType.Number
+                    ),
                     shape = RoundedCornerShape(14.dp),
                     colors = searchFieldColors()
                 )
-                OutlinedTextField(
-                    value = state.editorPackageWeightGramsInput,
-                    onValueChange = onPackageWeightGramsChange,
-                    label = { Text("Package weight (g)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = searchFieldColors()
-                )
+                if (!isHomeMode) {
+                    OutlinedTextField(
+                        value = state.editorPackageWeightGramsInput,
+                        onValueChange = onPackageWeightGramsChange,
+                        label = { Text("Package weight (g)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = searchFieldColors()
+                    )
+                }
             }
         },
         confirmButton = {
@@ -520,7 +574,6 @@ private fun FoodEditorDialog(
 
 private val SearchBackgroundColor = Color(0xFF0A120E)
 private val SearchCardColor = Color(0xFF1A2421)
-private val SearchItemColor = Color(0xFF1E2124)
 private val SearchAccentColor = Color(0xFF00E676)
 private val SearchTextPrimary = Color.White
 private val SearchTextSecondary = Color.Gray
@@ -559,3 +612,14 @@ private fun searchBarFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTrailingIconColor = SearchAccentColor,
     unfocusedTrailingIconColor = SearchTextSecondary
 )
+
+private fun mealTypeLabel(value: String): String {
+    val normalized = value.trim().lowercase()
+    return when (normalized) {
+        "breakfast" -> "Breakfast"
+        "lunch" -> "Lunch"
+        "dinner" -> "Dinner"
+        "snacks" -> "Snacks"
+        else -> "Meal"
+    }
+}
