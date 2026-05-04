@@ -32,12 +32,11 @@ import com.google.firebase.auth.FirebaseAuth
 import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.model.DietViewModel
+import it.sapienza.smartpantry.model.HomeViewModel
+import it.sapienza.smartpantry.model.ShoppingListViewModel
+import it.sapienza.smartpantry.ui.screens.PantryViewModel
 import it.sapienza.smartpantry.ui.screens.*
-import it.sapienza.smartpantry.ui.screens.DietScreen
-import it.sapienza.smartpantry.ui.screens.HomeScreen
-import it.sapienza.smartpantry.ui.screens.PantryScreen
-import it.sapienza.smartpantry.ui.screens.ProfileScreen
-import it.sapienza.smartpantry.ui.screens.ShoppingListScreen
+import java.util.Calendar
 
 
 class MainActivity : ComponentActivity() {
@@ -95,13 +94,36 @@ sealed class Screen(val route: String, val titleRes: Int, val iconRes: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewModel = viewModel()) {
+fun MainScreen(
+    initialUser: User,
+    onLogout: () -> Unit,
+    dietViewModel: DietViewModel = viewModel(),
+    homeViewModel: HomeViewModel = viewModel(),
+    pantryViewModel: PantryViewModel = viewModel(),
+    shoppingListViewModel: ShoppingListViewModel = viewModel()
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
     var user by remember { mutableStateOf(initialUser) }
     val context = LocalContext.current
+
+    // Caricamento iniziale centralizzato di tutti i dati
+    LaunchedEffect(user.uid) {
+        if (user.uid.isNotBlank()) {
+            // Inizializza Dieta
+            dietViewModel.initialize(user.uid)
+            
+            // Inizializza Pantry (senza refresh forzato se già presente, ma qui è l'avvio)
+            pantryViewModel.bindToUser(user.uid, refreshPantry = true)
+
+            // Inizializza Shopping List
+            shoppingListViewModel.initialize(user.uid)
+            
+            // Nota: Home non viene caricata qui perché HomeScreen lo farà automaticamente al primo avvio
+        }
+    }
 
     val bottomItems = listOf(Screen.Home, Screen.Pantry, Screen.ShopList, Screen.Diet, Screen.Stats)
     val darkBackground = Color(0xFF0A120E)
@@ -224,18 +246,35 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                 startDestination = Screen.Home.route,
                 modifier = Modifier.padding(innerPadding)
             ) {
-                composable(Screen.Home.route) { HomeScreen(user) }
-                composable(Screen.Pantry.route) { PantryScreen(
-                    uid = user.uid,
-                    onOpenSearchFood = {
-                        val intent = Intent(context, SearchFoodActivity::class.java)
-                        intent.putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
-                        intent.putExtra(SearchFoodActivity.EXTRA_SOURCE, SearchFoodActivity.SOURCE_PANTRY)
-                        context.startActivity(intent)
-                    }
-                ) }
-                composable(Screen.ShopList.route) { ShoppingListScreen(uid = user.uid, dietViewModel = dietViewModel) }
-                composable(Screen.Diet.route) { DietScreen(uid = user.uid, dietViewModel = dietViewModel) }
+                composable(Screen.Home.route) { 
+                    HomeScreen(user = user, homeViewModel = homeViewModel) 
+                }
+                composable(Screen.Pantry.route) { 
+                    PantryScreen(
+                        uid = user.uid,
+                        pantryViewModel = pantryViewModel,
+                        onOpenSearchFood = {
+                            val intent = Intent(context, SearchFoodActivity::class.java)
+                            intent.putExtra(SearchFoodActivity.EXTRA_UID, user.uid)
+                            intent.putExtra(SearchFoodActivity.EXTRA_SOURCE, SearchFoodActivity.SOURCE_PANTRY)
+                            context.startActivity(intent)
+                        }
+                    ) 
+                }
+                composable(Screen.ShopList.route) { 
+                    ShoppingListScreen(
+                        uid = user.uid, 
+                        dietViewModel = dietViewModel,
+                        pantryViewModel = pantryViewModel,
+                        shoppingListViewModel = shoppingListViewModel
+                    ) 
+                }
+                composable(Screen.Diet.route) { 
+                    DietScreen(
+                        uid = user.uid, 
+                        dietViewModel = dietViewModel
+                    ) 
+                }
                 composable(Screen.Stats.route) { StatsScreen(user = user) }
                 composable(Screen.Profile.route) {
                     ProfileScreen(

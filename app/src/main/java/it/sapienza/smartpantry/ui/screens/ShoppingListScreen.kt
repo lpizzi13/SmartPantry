@@ -43,6 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import it.sapienza.smartpantry.model.DietViewModel
 import it.sapienza.smartpantry.model.ShoppingListItem
+import it.sapienza.smartpantry.model.ShoppingListViewModel
 import it.sapienza.smartpantry.service.*
 import retrofit2.Call
 import retrofit2.Callback
@@ -56,20 +57,23 @@ private val ShoppingListAccentColor = Color(0xFF00E676)
 fun ShoppingListScreen(
     uid: String,
     dietViewModel: DietViewModel = viewModel(),
-    pantryViewModel: PantryViewModel = viewModel()
+    pantryViewModel: PantryViewModel = viewModel(),
+    shoppingListViewModel: ShoppingListViewModel = viewModel()
 ) {
     val dietState by dietViewModel.uiState.collectAsState()
     val pantryState by pantryViewModel.uiState.collectAsState()
+    val shoppingListState by shoppingListViewModel.uiState.collectAsState()
+    
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scanner = remember { GmsBarcodeScanning.getClient(context) }
 
-    var items by remember { mutableStateOf<List<ShoppingListItem>>(emptyList()) }
+    val items = shoppingListState.items
     var itemToMarkAsScanned by remember { mutableStateOf<Int?>(null) }
     var newItemName by remember { mutableStateOf("") }
-    var isGenerating by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(true) }
+    val isGenerating = shoppingListState.isGenerating
+    val isLoading = shoppingListState.isLoading
     var showClearDialog by remember { mutableStateOf(false) }
 
     // Shake detector logic
@@ -98,29 +102,16 @@ fun ShoppingListScreen(
         }
 
         sensorManager.registerListener(shakeListener, accelerometer, SensorManager.SENSOR_DELAY_UI)
+
         onDispose {
             sensorManager.unregisterListener(shakeListener)
         }
     }
 
-    // Initialize PantryViewModel and collect events
+    // Initialize ViewModels
     LaunchedEffect(uid) {
         pantryViewModel.bindToUser(uid, refreshPantry = false)
-    }
-
-    fun syncList(newItems: List<ShoppingListItem>, itemToAdd: ShoppingListItem? = null, replace: Boolean = true) {
-        items = newItems
-        val request = if (itemToAdd != null && !replace) {
-            UpdateShoppingListRequest(uid, item = itemToAdd, replace = false)
-        } else {
-            UpdateShoppingListRequest(uid, shoppingList = newItems, replace = true)
-        }
-
-        RetrofitClient.instance.updateShoppingList(request)
-            .enqueue(object : Callback<UpdateShoppingListResponse> {
-                override fun onResponse(call: Call<UpdateShoppingListResponse>, response: Response<UpdateShoppingListResponse>) {}
-                override fun onFailure(call: Call<UpdateShoppingListResponse>, t: Throwable) {}
-            })
+        shoppingListViewModel.initialize(uid)
     }
 
     LaunchedEffect(pantryViewModel) {
@@ -128,8 +119,7 @@ fun ShoppingListScreen(
             if (message == "Item added to pantry.") {
                 itemToMarkAsScanned?.let { index ->
                     if (index < items.size) {
-                        val newList = items.filterIndexed { i, _ -> i != index }
-                        syncList(newList, replace = true)
+                        shoppingListViewModel.deleteItem(index)
                     }
                 }
                 itemToMarkAsScanned = null
@@ -138,20 +128,10 @@ fun ShoppingListScreen(
         }
     }
 
-    // Load initial list
+    // Load initial list with lifecycle awareness
     LaunchedEffect(uid, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            RetrofitClient.instance.getShoppingList(GetShoppingListRequest(uid)).enqueue(object : Callback<GetShoppingListResponse> {
-                override fun onResponse(call: Call<GetShoppingListResponse>, response: Response<GetShoppingListResponse>) {
-                    isLoading = false
-                    if (response.isSuccessful) {
-                        items = response.body()?.shoppingList ?: emptyList()
-                    }
-                }
-                override fun onFailure(call: Call<GetShoppingListResponse>, t: Throwable) {
-                    isLoading = false
-                }
-            })
+            shoppingListViewModel.loadList(silent = true)
         }
     }
 
@@ -188,21 +168,7 @@ fun ShoppingListScreen(
                                 Toast.makeText(context, "Please create a diet first", Toast.LENGTH_SHORT).show()
                                 return@TextButton
                             }
-                            isGenerating = true
-                            val request = GenerateShoppingListRequest(uid, dietId)
-                            RetrofitClient.instance.generateShoppingList(request).enqueue(object : Callback<List<ShoppingListItem>> {
-                                override fun onResponse(call: Call<List<ShoppingListItem>>, response: Response<List<ShoppingListItem>>) {
-                                    isGenerating = false
-                                    if (response.isSuccessful) {
-                                        response.body()?.let { generatedItems ->
-                                            syncList(generatedItems, replace = true)
-                                        }
-                                    }
-                                }
-                                override fun onFailure(call: Call<List<ShoppingListItem>>, t: Throwable) {
-                                    isGenerating = false
-                                }
-                            })
+                            shoppingListViewModel.generateList(dietId)
                         },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         colors = ButtonDefaults.textButtonColors(contentColor = ShoppingListAccentColor)
@@ -233,9 +199,7 @@ fun ShoppingListScreen(
                             } else {
                                 Pair(trimmed, "")
                             }
-                            val newItem = ShoppingListItem(name = name, quantity = quantity)
-                            val newList = items + newItem
-                            syncList(newList, itemToAdd = newItem, replace = false)
+                            shoppingListViewModel.addItem(name, quantity)
                             newItemName = ""
                             focusManager.clearFocus()
                         }
@@ -253,14 +217,10 @@ fun ShoppingListScreen(
                         ShoppingListItemCard(
                             item = item,
                             onToggleChecked = { checked ->
-                                val newList = items.toMutableList().apply {
-                                    this[index] = item.copy(isChecked = checked)
-                                }
-                                syncList(newList, replace = true)
+                                shoppingListViewModel.toggleItem(index, checked)
                             },
                             onDelete = {
-                                val newList = items.filterIndexed { i, _ -> i != index }
-                                syncList(newList, replace = true)
+                                shoppingListViewModel.deleteItem(index)
                             },
                             onScan = {
                                 itemToMarkAsScanned = index
@@ -309,7 +269,7 @@ fun ShoppingListScreen(
             text = { Text("Are you sure you want to empty the shopping list?") },
             confirmButton = {
                 TextButton(onClick = {
-                    syncList(emptyList(), replace = true)
+                    shoppingListViewModel.clearList()
                     showClearDialog = false
                 }) {
                     Text("YES", color = ShoppingListAccentColor, fontWeight = FontWeight.Bold)

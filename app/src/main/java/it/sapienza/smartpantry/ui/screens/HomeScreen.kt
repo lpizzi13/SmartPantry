@@ -61,7 +61,7 @@ fun HomeScreen(user: User, homeViewModel: HomeViewModel = viewModel()) {
     LaunchedEffect(user.uid, dateKey, lifecycleOwner) {
         if (user.uid.isNotBlank()) {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                homeViewModel.loadDay(user.uid, dateKey)
+                homeViewModel.loadDay(user.uid, dateKey, silent = true)
             }
         }
     }
@@ -253,7 +253,7 @@ private fun isSameDay(first: Calendar, second: Calendar): Boolean =
     first.get(Calendar.YEAR) == second.get(Calendar.YEAR) &&
         first.get(Calendar.DAY_OF_YEAR) == second.get(Calendar.DAY_OF_YEAR)
 
-private fun formatDateKey(selectedDate: Calendar): String =
+fun formatDateKey(selectedDate: Calendar): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).format(startOfDay(selectedDate).time)
 
 private fun formatHomeDateLabel(selectedDate: Calendar): String {

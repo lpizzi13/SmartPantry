@@ -84,10 +84,18 @@ class HomeViewModel : ViewModel() {
     val events = _events.asSharedFlow()
     private var latestLoadToken: Long = 0L
 
-    fun loadDay(uid: String, dateKey: String) {
+    fun loadDay(uid: String, dateKey: String, silent: Boolean = false) {
         if (uid.isBlank() || dateKey.isBlank()) return
+        
+        // Se stiamo già caricando esattamente questa data, non fare nulla
+        if (_uiState.value.isLoading && _uiState.value.dateKey == dateKey) return
+
         val loadToken = ++latestLoadToken
-        _uiState.update { it.copy(isLoading = true, dateKey = dateKey, errorMessage = null) }
+        
+        // Mostriamo il caricamento solo se non è silent O se la data è cambiata
+        if (!silent || _uiState.value.dateKey != dateKey) {
+            _uiState.update { it.copy(isLoading = true, dateKey = dateKey, errorMessage = null) }
+        }
 
         viewModelScope.launch {
             val result = fetchDay(uid, dateKey)
