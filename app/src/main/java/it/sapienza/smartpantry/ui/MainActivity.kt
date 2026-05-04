@@ -121,6 +121,15 @@ fun MainScreen(
             // Inizializza Shopping List
             shoppingListViewModel.initialize(user.uid)
             
+            // Pre-caricamento immagine profilo per evitare glitch visivi
+            if (user.profileImageUrl.isNotBlank()) {
+                val request = ImageRequest.Builder(context)
+                    .data(user.profileImageUrl)
+                    .crossfade(true)
+                    .build()
+                context.imageLoader.enqueue(request)
+            }
+            
             // Nota: Home non viene caricata qui perché HomeScreen lo farà automaticamente al primo avvio
         }
     }
