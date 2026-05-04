@@ -33,9 +33,6 @@ import it.sapienza.smartpantry.R
 import it.sapienza.smartpantry.model.User
 import it.sapienza.smartpantry.model.DietViewModel
 import it.sapienza.smartpantry.ui.screens.*
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import it.sapienza.smartpantry.ui.screens.DietScreen
 import it.sapienza.smartpantry.ui.screens.HomeScreen
 import it.sapienza.smartpantry.ui.screens.PantryScreen
@@ -93,7 +90,7 @@ sealed class Screen(val route: String, val titleRes: Int, val iconRes: Int) {
     object Diet : Screen("diet", R.string.title_diet, R.drawable.menu_book_2_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
     object Stats : Screen("stats", R.string.title_stats, R.drawable.bar_chart_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
     object Profile : Screen("profile", R.string.title_profile, R.drawable.account_circle_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
-    object Notifications : Screen("notifications", R.string.title_notifications, R.drawable.notifications_24dp_e3e3e3_fill0_wght400_grad0_opsz24)
+    object MapSearch : Screen("map_search", R.string.title_notifications, R.drawable.map_search_24px)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -132,10 +129,10 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                     }
                 },
                 actions = {
-                    val isNotificationsSelected = currentDestination?.hierarchy?.any { it.route == Screen.Notifications.route } == true
+                    val isMapSelected = currentDestination?.hierarchy?.any { it.route == Screen.MapSearch.route } == true
                     IconButton(onClick = {
-                        if (currentDestination?.route != Screen.Notifications.route) {
-                            navController.navigate(Screen.Notifications.route) {
+                        if (currentDestination?.route != Screen.MapSearch.route) {
+                            navController.navigate(Screen.MapSearch.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
@@ -145,9 +142,10 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                         }
                     }) {
                         Icon(
-                            painter = painterResource(id = Screen.Notifications.iconRes),
-                            contentDescription = stringResource(id = Screen.Notifications.titleRes),
-                            tint = if (isNotificationsSelected) neonGreen else unselectedGrey
+                            painter = painterResource(id = Screen.MapSearch.iconRes),
+                            contentDescription = "Map Search",
+                            modifier = Modifier.size(24.dp),
+                            tint = if (isMapSelected) neonGreen else unselectedGrey
                         )
                     }
                     val isProfileSelected = currentDestination?.hierarchy?.any { it.route == Screen.Profile.route } == true
@@ -247,7 +245,7 @@ fun MainScreen(initialUser: User, onLogout: () -> Unit, dietViewModel: DietViewM
                         }
                     )
                 }
-                composable(Screen.Notifications.route) { PlaceholderScreen(stringResource(id = R.string.title_notifications)) }
+                composable(Screen.MapSearch.route) { MapSearchScreen() }
             }
         }
     }

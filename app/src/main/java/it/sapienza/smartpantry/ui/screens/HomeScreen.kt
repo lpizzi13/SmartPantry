@@ -263,18 +263,7 @@ private fun formatDateKey(selectedDate: Calendar): String =
 private fun formatHomeDateLabel(selectedDate: Calendar): String {
     val locale = Locale.ENGLISH
     val normalizedSelectedDate = startOfDay(selectedDate)
-    val today = startOfDay(Calendar.getInstance())
-    val yesterday = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
-    val tomorrow = (today.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
-
-    val dayPrefix = when {
-        isSameDay(normalizedSelectedDate, yesterday) -> "YESTERDAY"
-        isSameDay(normalizedSelectedDate, today) -> "TODAY"
-        isSameDay(normalizedSelectedDate, tomorrow) -> "TOMORROW"
-        else -> SimpleDateFormat("EEEE", locale).format(normalizedSelectedDate.time).uppercase(locale)
-    }
-    val dayMonth = SimpleDateFormat("d MMM", locale).format(normalizedSelectedDate.time).lowercase(locale)
-    return "$dayPrefix, $dayMonth"
+    return SimpleDateFormat("EEEE, d MMMM", locale).format(normalizedSelectedDate.time)
 }
 
 private fun localDateToUtcMillis(localDate: Calendar): Long =

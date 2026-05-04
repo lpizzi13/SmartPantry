@@ -73,6 +73,9 @@ interface SmartPantryApi {
 
     @POST("get-stats")
     fun getStats(@Body request: StatsRequest): Call<StatsResponse>
+
+    @POST("nearby-supermarkets")
+    fun getNearbySupermarkets(@Body request: NearbySupermarketsRequest): Call<NearbySupermarketsResponse>
 }
 
 data class GetShoppingListRequest(val uid: String)
