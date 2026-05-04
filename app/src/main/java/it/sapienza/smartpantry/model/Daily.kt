@@ -7,7 +7,7 @@ import it.sapienza.smartpantry.service.HomeAddRequest
 import it.sapienza.smartpantry.service.HomeDeleteRequest
 import it.sapienza.smartpantry.service.PantryGramsRequest
 import it.sapienza.smartpantry.service.RetrofitClient
-import java.util.Base64
+import android.util.Base64
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -330,9 +330,10 @@ class DailyViewModel : ViewModel() {
     }
 
     private fun encodeForEntryId(value: String): String {
-        return Base64.getUrlEncoder()
-            .withoutPadding()
-            .encodeToString(value.toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(
+            value.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        )
     }
 
     private fun parseBackendError(response: Response<*>, fallback: String): String {

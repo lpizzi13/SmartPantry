@@ -10,7 +10,7 @@ import it.sapienza.smartpantry.service.PantryAddRequest
 import it.sapienza.smartpantry.service.PantryGramsRequest
 import it.sapienza.smartpantry.service.HomeUpdateRequest
 import it.sapienza.smartpantry.service.RetrofitClient
-import java.util.Base64
+import android.util.Base64
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -421,7 +421,7 @@ class HomeViewModel : ViewModel() {
         val payload = entryId.removePrefix(prefix).substringBefore("::").trim()
         if (payload.isBlank()) return null
         return try {
-            val decoded = Base64.getUrlDecoder().decode(payload)
+            val decoded = Base64.decode(payload, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
             String(decoded, Charsets.UTF_8).trim().takeIf { it.isNotBlank() }
         } catch (_: IllegalArgumentException) {
             null

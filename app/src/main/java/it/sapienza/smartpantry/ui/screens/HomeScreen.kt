@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import it.sapienza.smartpantry.model.HomeEntry
 import it.sapienza.smartpantry.model.HomeViewModel
@@ -57,17 +58,12 @@ fun HomeScreen(user: User, homeViewModel: HomeViewModel = viewModel()) {
     val dateKey = remember(selectedDate.timeInMillis) { formatDateKey(selectedDate) }
     val homeState by homeViewModel.uiState.collectAsState()
 
-    LaunchedEffect(user.uid, dateKey) {
-        if (user.uid.isNotBlank()) homeViewModel.loadDay(user.uid, dateKey)
-    }
-    DisposableEffect(lifecycleOwner, user.uid, dateKey) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && user.uid.isNotBlank()) {
+    LaunchedEffect(user.uid, dateKey, lifecycleOwner) {
+        if (user.uid.isNotBlank()) {
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 homeViewModel.loadDay(user.uid, dateKey)
             }
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(Unit) {
         homeViewModel.events.collectLatest { message ->

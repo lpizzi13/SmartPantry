@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -70,7 +71,7 @@ import it.sapienza.smartpantry.service.PantryAddNutrients
 import it.sapienza.smartpantry.service.PantryAddRequest
 import it.sapienza.smartpantry.service.PantryGramsRequest
 import it.sapienza.smartpantry.service.RetrofitClient
-import java.util.Base64
+import android.util.Base64
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -174,6 +175,8 @@ class PantryViewModel : ViewModel() {
             emitEvent("User not authenticated. Please log in again.")
             return
         }
+        if (currentUid == uid && !refreshPantry) return
+        
         currentUid = uid
         if (refreshPantry) {
             refreshPantry()
@@ -977,9 +980,10 @@ class PantryViewModel : ViewModel() {
     }
 
     private fun encodeForEntryId(value: String): String {
-        return Base64.getUrlEncoder()
-            .withoutPadding()
-            .encodeToString(value.toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(
+            value.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+        )
     }
 
     private fun Long.toIntOrNullChecked(allowZero: Boolean = false): Int? {
@@ -1019,21 +1023,21 @@ fun PantryScreen(
     }
 
     LaunchedEffect(uid) {
-        if (uid.isNotBlank()) pantryViewModel.bindToUser(uid)
+        if (uid.isNotBlank()) {
+            pantryViewModel.bindToUser(uid, refreshPantry = false)
+        }
+    }
+    LaunchedEffect(uid, lifecycleOwner) {
+        if (uid.isNotBlank()) {
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                pantryViewModel.refreshPantry()
+            }
+        }
     }
     LaunchedEffect(Unit) {
         pantryViewModel.events.collectLatest { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
-    }
-    DisposableEffect(lifecycleOwner, uid) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && uid.isNotBlank()) {
-                pantryViewModel.refreshPantry()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (uid.isBlank()) {

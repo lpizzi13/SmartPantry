@@ -36,6 +36,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import it.sapienza.smartpantry.model.DietViewModel
@@ -59,6 +62,7 @@ fun ShoppingListScreen(
     val pantryState by pantryViewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scanner = remember { GmsBarcodeScanning.getClient(context) }
 
     var items by remember { mutableStateOf<List<ShoppingListItem>>(emptyList()) }
@@ -101,7 +105,7 @@ fun ShoppingListScreen(
 
     // Initialize PantryViewModel and collect events
     LaunchedEffect(uid) {
-        pantryViewModel.bindToUser(uid)
+        pantryViewModel.bindToUser(uid, refreshPantry = false)
     }
 
     fun syncList(newItems: List<ShoppingListItem>, itemToAdd: ShoppingListItem? = null, replace: Boolean = true) {
@@ -135,18 +139,20 @@ fun ShoppingListScreen(
     }
 
     // Load initial list
-    LaunchedEffect(uid) {
-        RetrofitClient.instance.getShoppingList(GetShoppingListRequest(uid)).enqueue(object : Callback<GetShoppingListResponse> {
-            override fun onResponse(call: Call<GetShoppingListResponse>, response: Response<GetShoppingListResponse>) {
-                isLoading = false
-                if (response.isSuccessful) {
-                    items = response.body()?.shoppingList ?: emptyList()
+    LaunchedEffect(uid, lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            RetrofitClient.instance.getShoppingList(GetShoppingListRequest(uid)).enqueue(object : Callback<GetShoppingListResponse> {
+                override fun onResponse(call: Call<GetShoppingListResponse>, response: Response<GetShoppingListResponse>) {
+                    isLoading = false
+                    if (response.isSuccessful) {
+                        items = response.body()?.shoppingList ?: emptyList()
+                    }
                 }
-            }
-            override fun onFailure(call: Call<GetShoppingListResponse>, t: Throwable) {
-                isLoading = false
-            }
-        })
+                override fun onFailure(call: Call<GetShoppingListResponse>, t: Throwable) {
+                    isLoading = false
+                }
+            })
+        }
     }
 
     Column(

@@ -101,7 +101,9 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = uiState.selectedDiet?.name ?: "Select Diet",
+                            text = (uiState.selectedDiet?.name ?: "Select Diet").let { 
+                                if (it.length > 16) it.take(16) + "..." else it 
+                            },
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -120,7 +122,11 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                     ) {
                         uiState.diets.forEach { diet ->
                             DropdownMenuItem(
-                                text = { Text(diet.name) },
+                                text = { 
+                                    Text(
+                                        if (diet.name.length > 16) diet.name.take(16) + "..." else diet.name
+                                    ) 
+                                },
                                 leadingIcon = {
                                     if (diet.isFavorite) {
                                         Icon(
@@ -330,7 +336,11 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
         AlertDialog(
             onDismissRequest = { dietToDelete = null },
             title = { Text("Delete Diet") },
-            text = { Text("Are you sure you want to delete '${dietToDelete?.name}'? This action cannot be undone.") },
+            text = {
+                val name = dietToDelete?.name ?: ""
+                val displayName = if (name.length > 16) name.take(16) + "..." else name
+                Text("Are you sure you want to delete '$displayName'? This action cannot be undone.")
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
