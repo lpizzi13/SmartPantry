@@ -102,7 +102,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                     ) {
                         Text(
                             text = (uiState.selectedDiet?.name ?: "Select Diet").let { 
-                                if (it.length > 16) it.take(16) + "..." else it 
+                                if (it.length > 12) it.take(12) + "..." else it 
                             },
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
@@ -124,7 +124,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
                             DropdownMenuItem(
                                 text = { 
                                     Text(
-                                        if (diet.name.length > 16) diet.name.take(16) + "..." else diet.name
+                                        if (diet.name.length > 12) diet.name.take(12) + "..." else diet.name
                                     ) 
                                 },
                                 leadingIcon = {
@@ -338,7 +338,7 @@ fun DietScreen(uid: String = "", dietViewModel: DietViewModel = viewModel()) {
             title = { Text("Delete Diet") },
             text = {
                 val name = dietToDelete?.name ?: ""
-                val displayName = if (name.length > 16) name.take(16) + "..." else name
+                val displayName = if (name.length > 12) name.take(12) + "..." else name
                 Text("Are you sure you want to delete '$displayName'? This action cannot be undone.")
             },
             confirmButton = {

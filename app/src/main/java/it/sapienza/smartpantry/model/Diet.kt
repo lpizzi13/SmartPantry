@@ -89,6 +89,15 @@ class DietViewModel : ViewModel() {
         currentUid?.let { loadDiet(it) }
     }
 
+    private fun ensureFavorite(diets: List<Diet>): List<Diet> {
+        if (diets.isEmpty()) return diets
+        return when {
+            diets.size == 1 -> if (!diets[0].isFavorite) listOf(diets[0].copy(isFavorite = true)) else diets
+            diets.none { it.isFavorite } -> diets.mapIndexed { i, d -> if (i == 0) d.copy(isFavorite = true) else d }
+            else -> diets
+        }
+    }
+
     private fun loadDiet(uid: String) {
         RetrofitClient.instance.getDiet(DietRequest(uid)).enqueue(object : Callback<DietResponse> {
             override fun onResponse(call: Call<DietResponse>, response: Response<DietResponse>) {
@@ -96,16 +105,18 @@ class DietViewModel : ViewModel() {
                 val remoteDietData = response.body()?.dietData
                 val remoteDiets = remoteDietData?.diets ?: emptyList()
 
+                val updatedDiets = ensureFavorite(remoteDiets)
+
                 // Priorità di selezione: 1. Dieta preferita, 2. selectedDietId dal backend, 3. Prima dieta della lista
-                val favoriteDietId = remoteDiets.find { it.isFavorite }?.duid
+                val favoriteDietId = updatedDiets.find { it.isFavorite }?.duid
                 val selectedId = favoriteDietId
-                    ?: remoteDietData?.selectedDietId?.takeIf { requestedId -> remoteDiets.any { it.duid == requestedId } }
-                    ?: remoteDiets.firstOrNull()?.duid
+                    ?: remoteDietData?.selectedDietId?.takeIf { requestedId -> updatedDiets.any { it.duid == requestedId } }
+                    ?: updatedDiets.firstOrNull()?.duid
 
-                _uiState.update { it.copy(diets = remoteDiets, selectedDietId = selectedId) }
+                _uiState.update { it.copy(diets = updatedDiets, selectedDietId = selectedId) }
 
-                // Se il backend non ha ancora dati dieta, inizializziamo subito se necessario (ma ora partiamo vuoti)
-                if (remoteDiets.isEmpty()) {
+                // Se abbiamo modificato le diete (es. impostato una preferita), salviamo lo stato
+                if (updatedDiets != remoteDiets || remoteDiets.isEmpty()) {
                     persistDietState()
                 }
             }
@@ -128,7 +139,9 @@ class DietViewModel : ViewModel() {
     private fun updateState(shouldPersist: Boolean = false, transform: (DietUiState) -> DietUiState) {
         var hasChanged = false
         _uiState.update { state ->
-            val updatedState = transform(state)
+            val transformedState = transform(state)
+            val dietsWithFavorite = ensureFavorite(transformedState.diets)
+            val updatedState = transformedState.copy(diets = dietsWithFavorite)
             hasChanged = updatedState != state
             updatedState
         }
@@ -167,9 +180,12 @@ class DietViewModel : ViewModel() {
     fun deleteDiet(duid: String) {
         val uid = currentUid ?: return
         val currentState = _uiState.value
-        val updatedDiets = currentState.diets.filter { it.duid != duid }
+        val filteredDiets = currentState.diets.filter { it.duid != duid }
+        val updatedDiets = ensureFavorite(filteredDiets)
+
+        val favoriteId = updatedDiets.find { it.isFavorite }?.duid
         val newSelectedId = if (currentState.selectedDietId == duid) {
-            updatedDiets.firstOrNull()?.duid
+            favoriteId ?: updatedDiets.firstOrNull()?.duid
         } else {
             currentState.selectedDietId
         }
@@ -180,6 +196,7 @@ class DietViewModel : ViewModel() {
             override fun onResponse(call: Call<DeleteDietResponse>, response: Response<DeleteDietResponse>) {
                 if (response.isSuccessful) {
                     _uiState.update { it.copy(diets = updatedDiets, selectedDietId = newSelectedId) }
+                    if (updatedDiets != filteredDiets) persistDietState()
                 }
             }
             override fun onFailure(call: Call<DeleteDietResponse>, t: Throwable) {
